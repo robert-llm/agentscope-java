@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentScope Java 2.0 系统学习指南</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --surface: #f6f8fa;
+            --surface2: #eef1f5;
+            --border: #d8dee4;
+            --text: #1f2937;
+            --text-muted: #6b7280;
+            --accent: #3b5ccc;
+            --accent2: #0d9488;
+            --accent3: #e0457a;
+            --accent4: #d97706;
+            --code-bg: #f0f3f7;
+            --success: #0d9488;
+            --warning: #d97706;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.75;
+            padding: 0;
+        }
+        .hero {
+            background: linear-gradient(135deg, #eef2ff 0%, #ffffff 50%, #f0fdf9 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 60px 40px 50px;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 2.6em;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        .hero .subtitle {
+            font-size: 1.15em;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .hero .badges {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.82em;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .badge.blue { color: var(--accent); border-color: rgba(59,92,204,0.3); }
+        .badge.green { color: var(--accent2); border-color: rgba(13,148,136,0.3); }
+        .badge.pink { color: var(--accent3); border-color: rgba(224,69,122,0.3); }
+        .badge.yellow { color: var(--accent4); border-color: rgba(217,119,6,0.3); }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 30px; }
+
+        .toc {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 30px 35px;
+            margin-bottom: 50px;
+        }
+        .toc h2 {
+            font-size: 1.4em;
+            margin-bottom: 18px;
+            color: var(--accent);
+        }
+        .toc ol { padding-left: 22px; }
+        .toc li { margin-bottom: 8px; }
+        .toc a {
+            color: var(--text);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .toc a:hover { color: var(--accent); }
+        .toc .sub { padding-left: 20px; list-style-type: disc; }
+        .toc .sub li { margin-bottom: 4px; font-size: 0.93em; color: var(--text-muted); }
+
+        .phase {
+            margin-bottom: 60px;
+        }
+        .phase-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 30px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border);
+        }
+        .phase-num {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3em;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+        .phase-num.p1 { background: rgba(59,92,204,0.1); color: var(--accent); }
+        .phase-num.p2 { background: rgba(13,148,136,0.1); color: var(--accent2); }
+        .phase-num.p3 { background: rgba(224,69,122,0.1); color: var(--accent3); }
+        .phase-num.p4 { background: rgba(217,119,6,0.1); color: var(--accent4); }
+        .phase-num.p5 { background: rgba(59,92,204,0.1); color: var(--accent); }
+        .phase-header h2 { font-size: 1.6em; font-weight: 700; }
+        .phase-header .time { color: var(--text-muted); font-size: 0.9em; margin-left: auto; }
+
+        h3 {
+            font-size: 1.25em;
+            font-weight: 700;
+            margin: 30px 0 14px;
+            color: var(--accent2);
+        }
+        h4 {
+            font-size: 1.05em;
+            font-weight: 600;
+            margin: 22px 0 10px;
+            color: var(--text);
+        }
+        p { margin-bottom: 14px; }
+        strong { color: #111827; }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 24px 28px;
+            margin-bottom: 20px;
+        }
+        .card.highlight {
+            border-left: 3px solid var(--accent);
+        }
+        .card.design {
+            border-left: 3px solid var(--accent2);
+        }
+        .card.warning-card {
+            border-left: 3px solid var(--accent4);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0 20px;
+            font-size: 0.93em;
+        }
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: var(--surface2);
+            font-weight: 600;
+            color: var(--accent);
+            font-size: 0.88em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tr:hover td { background: rgba(59,92,204,0.05); }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px 22px;
+            overflow-x: auto;
+            font-size: 0.88em;
+            line-height: 1.6;
+            margin: 14px 0 18px;
+        }
+        code {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            color: var(--accent2);
+        }
+        pre code { color: var(--text); }
+        .inline-code {
+            background: var(--surface2);
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .arch-diagram {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 24px;
+            margin: 18px 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre;
+            color: var(--text-muted);
+        }
+        .arch-diagram .hl-blue { color: var(--accent); }
+        .arch-diagram .hl-green { color: var(--accent2); }
+        .arch-diagram .hl-pink { color: var(--accent3); }
+        .arch-diagram .hl-yellow { color: var(--accent4); }
+
+        .checklist {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 24px 28px;
+            margin: 20px 0;
+        }
+        .checklist h4 {
+            color: var(--accent4);
+            margin-top: 0;
+        }
+        .checklist ol { padding-left: 22px; }
+        .checklist li {
+            margin-bottom: 10px;
+            padding-left: 6px;
+        }
+        .checklist li::marker { color: var(--accent4); }
+
+        .resource-table td:first-child { font-weight: 600; white-space: nowrap; }
+
+        ul, ol { padding-left: 22px; margin-bottom: 14px; }
+        li { margin-bottom: 6px; }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 50px 0;
+        }
+
+        .tip {
+            background: rgba(13,148,136,0.06);
+            border: 1px solid rgba(13,148,136,0.2);
+            border-radius: 8px;
+            padding: 14px 20px;
+            margin: 16px 0;
+            font-size: 0.93em;
+        }
+        .tip::before {
+            content: "💡 ";
+        }
+
+        .paw-section {
+            background: linear-gradient(135deg, var(--surface) 0%, rgba(59,92,204,0.04) 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 30px 35px;
+            margin: 30px 0;
+        }
+
+        @media (max-width: 768px) {
+            .hero { padding: 40px 20px 30px; }
+            .hero h1 { font-size: 1.8em; }
+            .container { padding: 20px 16px; }
+            .phase-header { flex-wrap: wrap; }
+            .phase-header .time { margin-left: 0; }
+            table { font-size: 0.85em; }
+            th, td { padding: 8px 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>AgentScope Java 2.0 系统学习指南</h1>
+    <p class="subtitle">从架构全景到源码精读，分五个阶段逐步掌握这个企业级智能体框架</p>
+    <div class="badges">
+        <span class="badge blue">JDK 17+</span>
+        <span class="badge green">Reactive (Reactor)</span>
+        <span class="badge pink">双层架构</span>
+        <span class="badge yellow">v2.0.3-SNAPSHOT</span>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- 目录 -->
+    <div class="toc">
+        <h2>目录</h2>
+        <ol>
+            <li><a href="#overview">项目概览与核心理念</a></li>
+            <li><a href="#phase1">第一阶段：理解全局架构（1-2 天）</a>
+                <ul class="sub">
+                    <li>Maven 模块结构</li>
+                    <li>核心接口分层设计</li>
+                    <li>消息模型 — ContentBlock 体系</li>
+                    <li>事件系统 — 31 种类型化事件</li>
+                </ul>
+            </li>
+            <li><a href="#phase2">第二阶段：掌握 agentscope-core（3-5 天）</a>
+                <ul class="sub">
+                    <li>消息模型深入</li>
+                    <li>工具系统</li>
+                    <li>ReAct 推理循环</li>
+                    <li>权限系统与 HITL</li>
+                    <li>状态管理与 Session 持久化</li>
+                </ul>
+            </li>
+            <li><a href="#phase3">第三阶段：掌握 agentscope-harness（5-7 天）</a></li>
+            <li><a href="#phase4">第四阶段：扩展生态（3-5 天）</a></li>
+            <li><a href="#phase5">第五阶段：高级主题与综合实战（持续）</a></li>
+            <li><a href="#paw">附录：agentscope-paw 解读</a></li>
+            <li><a href="#resources">学习资源汇总</a></li>
+        </ol>
+    </div>
+
+    <!-- 项目概览 -->
+    <section id="overview" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p1">0</div>
+            <h2>项目概览与核心理念</h2>
+        </div>
+
+        <div class="card highlight">
+            <p><strong>AgentScope Java 2.0</strong> 是阿里巴巴开源的企业级、分布式、生产就绪的智能体框架。核心采用<strong>双层架构</strong>：</p>
+            <ul>
+                <li><strong>agentscope-core</strong> — 裸 ReAct 推理循环，轻量无依赖</li>
+                <li><strong>agentscope-harness</strong> — 在 core 之上叠加工程化能力（Workspace、Memory、Middleware、子 Agent、状态持久化等）</li>
+            </ul>
+        </div>
+
+        <p>这意味着：</p>
+        <ul>
+            <li>如果你只需要一个简单的 Agent，用 <code class="inline-code">agentscope-core</code> 就够了</li>
+            <li>如果你需要 Workspace、Memory、Session 持久化、子 Agent 编排等生产级能力，引入 <code class="inline-code">agentscope-harness</code></li>
+        </ul>
+
+        <div class="tip">先跑示例，再读源码。<code class="inline-code">agentscope-examples/documentation</code> 中有 50 个精心编写的示例，覆盖所有核心特性，是最好的起点。</div>
+    </section>
+
+    <!-- 第一阶段 -->
+    <section id="phase1" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p1">1</div>
+            <h2>理解全局架构</h2>
+            <span class="time">建议 1-2 天</span>
+        </div>
+
+        <h3>1.1 Maven 模块结构</h3>
+        <table>
+            <thead><tr><th>模块</th><th>职责</th></tr></thead>
+            <tbody>
+                <tr><td><strong>agentscope-core</strong></td><td>核心抽象：Agent 接口、消息模型、事件系统、Tool、Memory、Middleware 基础</td></tr>
+                <tr><td><strong>agentscope-harness</strong></td><td>工程化层：HarnessAgent、Workspace、文件系统、Gateway、Session 管理</td></tr>
+                <tr><td><strong>agentscope-extensions</strong></td><td>扩展插件：模型提供商、数据库、RAG、Channel（钉钉/飞书/企微）等</td></tr>
+                <tr><td><strong>agentscope-examples</strong></td><td>示例代码：documentation 示例、copilotkit、agui、paw 等</td></tr>
+                <tr><td><strong>agentscope-service</strong></td><td>Agent 控制面：注册、发现、Dashboard</td></tr>
+                <tr><td><strong>agentscope-dependencies-bom</strong></td><td>依赖版本管理</td></tr>
+                <tr><td><strong>agentscope-distribution</strong></td><td>发布打包</td></tr>
+            </tbody>
+        </table>
+
+        <div class="card design">
+            <h4>关键设计决策</h4>
+            <p><code class="inline-code">agentscope-harness</code> 只依赖 <code class="inline-code">agentscope-core</code>，这意味着 core 是完全独立的，你可以只用 core 来构建轻量级 Agent。</p>
+        </div>
+
+        <h3>1.2 核心接口分层设计</h3>
+        <p>这是整个框架最精妙的设计之一。理解了这个接口层次，就理解了框架的设计哲学：</p>
+
+        <div class="arch-diagram"><span class="hl-blue">                ┌─────────────────────┐
+                │      Agent          │  ← 顶层接口（完整能力）
+                │  getAgentId()       │
+                │  getName()          │
+                │  interrupt()        │
+                │  getToolkit()       │
+                │  getAgentState()    │
+                └──────┬──────────────┘
+                       │ extends
+          ┌────────────┼────────────────┐
+          │            │                │
+┌─────────▼──────┐  ┌──▼────────────┐  ┌▼────────────────┐
+│  CallableAgent │  │ StreamableAgent│  │ ObservableAgent │
+│                │  │ (deprecated)   │  │                 │
+│ call(Msg)      │  │ stream(Msg)    │  │ observe(Msg)    │
+│ call(String)   │  │ streamEvents() │  │ 接收消息但不回复  │
+│ call(List&lt;Msg&gt;)│  │  → Flux&lt;Event&gt; │  │ 用于多Agent协作  │
+│ → Mono&lt;Msg&gt;    │  └───────────────┘  └─────────────────┘
+└────────────────┘</span></div>
+
+        <p>三个子接口各有清晰职责：</p>
+        <ul>
+            <li><strong>CallableAgent</strong> — 处理消息并返回响应，核心方法 <code class="inline-code">Mono&lt;Msg&gt; call(List&lt;Msg&gt; msgs)</code></li>
+            <li><strong>StreamableAgent</strong> — 流式输出执行过程事件（v1 遗留，v2 推荐用 <code class="inline-code">ReActAgent.streamEvents()</code>）</li>
+            <li><strong>ObservableAgent</strong> — 被动观察消息，不产生回复，用于多 Agent 协作场景</li>
+        </ul>
+
+        <h3>1.3 实现类层次</h3>
+        <div class="arch-diagram"><span class="hl-green">Agent</span> (接口)
+  └── <span class="hl-green">AgentBase</span> (抽象基类, 1040行)
+        ├── 提供：Hook 管理、中断机制、Tracing、状态管理
+        ├── 不提供：Memory 管理（交给子类）
+        │
+        └── <span class="hl-blue">ReActAgent</span> (核心实现, 5355行)
+              ├── Reasoning → Acting → Observation 循环
+              ├── Memory 管理
+              ├── Tool 执行
+              ├── Middleware 链
+              ├── 权限引擎
+              └── 事件流发射
+
+<span class="hl-pink">HarnessAgent</span> (harness 层, 2922行)
+  └── 内部持有 ReActAgent，通过 Middleware 叠加：
+        ├── Workspace 文件系统
+        ├── 分层 Memory
+        ├── 子 Agent 编排
+        ├── Skill 技能仓库
+        ├── Session 持久化
+        └── 上下文自动压缩</div>
+
+        <h3>1.4 消息模型 — ContentBlock 体系</h3>
+        <p>框架使用 Java 17 的 <code class="inline-code">sealed class</code> 来定义内容块类型系统：</p>
+        <div class="arch-diagram"><span class="hl-yellow">ContentBlock</span> (sealed)
+  ├── <span class="hl-green">TextBlock</span>        — 纯文本
+  ├── <span class="hl-green">ThinkingBlock</span>    — Agent 思考/推理内容
+  ├── <span class="hl-green">ImageBlock</span>       — 图片（URL 或 Base64）
+  ├── <span class="hl-green">AudioBlock</span>       — 音频
+  ├── <span class="hl-green">VideoBlock</span>       — 视频
+  ├── <span class="hl-green">ToolUseBlock</span>     — 工具调用请求
+  ├── <span class="hl-green">ToolResultBlock</span>  — 工具执行结果
+  ├── <span class="hl-green">HintBlock</span>        — RAG/记忆等提示
+  └── <span class="hl-green">DataBlock</span>        — 通用二进制数据</div>
+        <p><code class="inline-code">sealed</code> 关键字意味着编译器可以做穷举检查，这是 Java 17 的模式匹配特性。</p>
+
+        <h3>1.5 事件系统 — 31 种类型化事件</h3>
+        <table>
+            <thead><tr><th>类别</th><th>事件</th><th>说明</th></tr></thead>
+            <tbody>
+                <tr><td>Agent 生命周期</td><td><code>AGENT_START</code>, <code>AGENT_END</code>, <code>AGENT_RESULT</code></td><td>Agent 开始/结束/产出结果</td></tr>
+                <tr><td>模型调用</td><td><code>MODEL_CALL_START</code>, <code>MODEL_CALL_END</code></td><td>LLM API 调用</td></tr>
+                <tr><td>文本流</td><td><code>TEXT_BLOCK_START/DELTA/END</code></td><td>文本增量输出</td></tr>
+                <tr><td>思考流</td><td><code>THINKING_BLOCK_START/DELTA/END</code></td><td>推理过程输出</td></tr>
+                <tr><td>数据流</td><td><code>DATA_BLOCK_START/DELTA/END</code></td><td>二进制数据流</td></tr>
+                <tr><td>工具调用</td><td><code>TOOL_CALL_START/DELTA/END</code></td><td>工具调用过程</td></tr>
+                <tr><td>工具结果</td><td><code>TOOL_RESULT_START/TEXT_DELTA/DATA_DELTA/END</code></td><td>工具执行结果</td></tr>
+                <tr><td>HITL</td><td><code>REQUIRE_USER_CONFIRM</code>, <code>USER_CONFIRM_RESULT</code> 等</td><td>人机交互</td></tr>
+                <tr><td>其他</td><td><code>HINT_BLOCK</code>, <code>CUSTOM</code>, <code>SUBAGENT_EXPOSED</code> 等</td><td>扩展场景</td></tr>
+            </tbody>
+        </table>
+
+        <h3>1.6 第一个示例</h3>
+        <pre><code>// 1. 构建 Agent — 只需 4 行
+ReActAgent agent = ReActAgent.builder()
+    .name("Assistant")
+    .sysPrompt("You are a helpful AI assistant.")
+    .model("dashscope:qwen-plus")     // 自动从环境变量读取 API Key
+    .toolkit(new Toolkit())
+    .build();
+
+// 2. 流式调用 — 监听事件
+agent.streamEvents(userMsg)
+    .doOnNext(event -&gt; {
+        if (event instanceof TextBlockDeltaEvent e) {
+            System.out.print(e.getDelta());  // 增量文本
+        }
+    })
+    .blockLast();</code></pre>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- 第二阶段 -->
+    <section id="phase2" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p2">2</div>
+            <h2>掌握 agentscope-core</h2>
+            <span class="time">建议 3-5 天</span>
+        </div>
+
+        <h3>2.1 消息模型深入</h3>
+        <h4>Msg 的核心字段</h4>
+        <pre><code>public class Msg implements State {
+    private final String id;                    // 唯一标识
+    private final String name;                  // 发送者名称
+    private final MsgRole role;                 // USER / ASSISTANT / SYSTEM / TOOL
+    private final List&lt;ContentBlock&gt; content;   // 内容块列表（不可变）
+    private final Map&lt;String, Object&gt; metadata; // 扩展元数据
+    private final String timestamp;             // 时间戳
+    private final ChatUsage usage;              // Token 消耗统计
+}</code></pre>
+
+        <div class="card design">
+            <h4>关键设计决策</h4>
+            <ul>
+                <li><strong>Content 是不可变 List</strong> — <code class="inline-code">toList()</code> 保证线程安全</li>
+                <li><strong>Role 严格校验</strong> — 构造函数调用 <code class="inline-code">validateRoleContent()</code> 确保角色与内容块匹配</li>
+                <li><strong>Metadata 是开放 Map</strong> — 用于承载 HITL 确认结果、合成标记、结构化输出等框架级数据</li>
+            </ul>
+        </div>
+
+        <h4>Role 与 ContentBlock 的约束规则</h4>
+        <table>
+            <thead><tr><th>Role</th><th>允许的 ContentBlock 类型</th></tr></thead>
+            <tbody>
+                <tr><td><code>USER</code></td><td>TextBlock, DataBlock, ImageBlock, AudioBlock, VideoBlock</td></tr>
+                <tr><td><code>SYSTEM</code></td><td>TextBlock, HintBlock</td></tr>
+                <tr><td><code>ASSISTANT</code></td><td>TextBlock, ThinkingBlock, ToolUseBlock, DataBlock</td></tr>
+                <tr><td><code>TOOL</code></td><td>ToolResultBlock（不限制）</td></tr>
+            </tbody>
+        </table>
+
+        <h3>2.2 工具系统</h3>
+        <h4>AgentTool 接口</h4>
+        <pre><code>public interface AgentTool {
+    String getName();                    // 工具名称（snake_case 约定）
+    String getDescription();            // 描述（帮助 LLM 决定何时调用）
+    Map&lt;String, Object&gt; getParameters(); // JSON Schema 参数定义
+    boolean isReadOnly();               // 是否只读（Plan Mode 下自动放行）
+    Mono&lt;ToolResultBlock&gt; callAsync(ToolCallParam param); // 异步执行
+}</code></pre>
+
+        <h4>Toolkit — 工具管理门面</h4>
+        <p><code class="inline-code">Toolkit</code>（1061 行）是工具系统的统一入口，内部委托给多个专业管理器：</p>
+        <div class="arch-diagram"><span class="hl-blue">Toolkit</span> (门面)
+  ├── <span class="hl-green">ToolRegistry</span>        — 工具注册与查找
+  ├── <span class="hl-green">ToolGroupManager</span>    — 工具组 CRUD + 活跃组管理
+  ├── <span class="hl-green">ToolSchemaProvider</span>  — 生成 JSON Schema（按组过滤）
+  ├── <span class="hl-green">McpClientManager</span>    — MCP 客户端生命周期管理
+  ├── <span class="hl-green">MetaToolFactory</span>     — 创建 meta 工具（动态组控制）
+  └── <span class="hl-green">ToolExecutor</span>        — 并行/串行工具执行 + 校验</div>
+
+        <h4>工具注册方式</h4>
+        <ul>
+            <li><strong>注解扫描</strong> — <code class="inline-code">toolkit.registerTool(myObj)</code> 扫描 <code class="inline-code">@Tool</code> 注解方法</li>
+            <li><strong>直接注册</strong> — <code class="inline-code">toolkit.registerAgentTool(agentTool)</code> 注册 AgentTool 实现</li>
+            <li><strong>MCP 客户端</strong> — <code class="inline-code">toolkit.registration().mcpClient(mcpWrapper).apply()</code></li>
+            <li><strong>子 Agent 工具</strong> — 通过 SubAgentProvider 将子 Agent 包装为工具</li>
+        </ul>
+
+        <h3>2.3 ReAct 推理循环 — 核心中的核心</h3>
+        <p><code class="inline-code">ReActAgent.java</code>（5356 行）是整个框架的心脏。</p>
+
+        <h4>执行入口</h4>
+        <div class="arch-diagram"><span class="hl-blue">call(msgs)</span> ──────► <span class="hl-green">callInternal()</span> ──────► <span class="hl-pink">buildAgentStream()</span>
+                                                          │
+<span class="hl-blue">streamEvents(msgs)</span> ──────────────────────────────────►│
+                                                          │
+                                            ┌─────────────▼──────────┐
+                                            │  AgentStartEvent       │
+                                            │  ↓                     │
+                                            │  runLifecycle()        │
+                                            │  ↓                     │
+                                            │  doCall()              │
+                                            │  ↓                     │
+                                            │  AgentResultEvent      │
+                                            │  ↓                     │
+                                            │  AgentEndEvent         │
+                                            └────────────────────────┘</div>
+
+        <div class="card highlight">
+            <p><strong>关键设计</strong>：<code class="inline-code">call()</code> 和 <code class="inline-code">streamEvents()</code> 共享同一个 <code class="inline-code">buildAgentStream()</code> 核心，保证 <code class="inline-code">onAgent</code> Middleware 链在所有调用路径上都会触发。</p>
+        </div>
+
+        <h4>核心 ReAct 循环</h4>
+        <div class="arch-diagram"><span class="hl-yellow">doCallInner(msgs)</span>
+    │
+    ├── 检查 pending tool calls（恢复机制）
+    │   ├── 有 ASKING 工具 → 等待 HITL 确认
+    │   ├── 有 pending 工具 + 无结果 → 自动修补
+    │   └── 有 pending 工具 + 有结果 → 验证并继续
+    │
+    └── <span class="hl-green">coreAgent()</span> ──► executeIteration(0)
+                            │
+                ┌───────────▼───────────┐
+                │  <span class="hl-blue">reasoning(iter)</span>      │ ← 推理阶段
+                │  1. 检查 maxIters      │
+                │  2. firePreReasoning   │
+                │  3. onReasoning MW链   │
+                │  4. model.stream()     │ ← 调用 LLM
+                │  5. 累积 chunk         │
+                │  6. firePostReasoning  │
+                │  7. 判断下一步          │
+                │     ├── HITL stop?     │
+                │     ├── finished?      │
+                │     └── → acting()     │
+                └───────────┬───────────┘
+                            │
+                ┌───────────▼───────────┐
+                │  <span class="hl-pink">acting(iter)</span>         │ ← 行动阶段
+                │  1. 提取 pending 工具  │
+                │  2. firePreActing      │
+                │  3. onActing MW 链     │
+                │  4. 执行工具           │
+                │  5. firePostActing     │
+                │  6. 判断下一步          │
+                │     ├── stop?          │
+                │     ├── suspended?     │
+                │     └── → reasoning()  │ ← 回到推理
+                └───────────────────────┘</div>
+
+        <h4>Middleware 链在循环中的位置</h4>
+        <p>每一阶段都被 Middleware 链包裹，形成 5 个拦截点：</p>
+        <div class="arch-diagram"><span class="hl-blue">onAgent</span> ──────────────────────────────────────────────┐
+  │                                                    │
+  <span class="hl-green">onSystemPrompt</span> ──► 修改系统提示                       │
+  │                                                    │
+  <span class="hl-green">onReasoning</span> ─────────────────────────────┐           │
+    │                                      │           │
+    <span class="hl-yellow">onModelCall</span> ──► 拦截模型调用            │           │
+    │              (可替换 model/messages)   │           │
+    │                                      │           │
+  <span class="hl-pink">onActing</span> ──► 拦截工具执行                 │           │
+    │          (可替换工具列表)              │           │
+    │                                      │           │
+  └──────────────────────────────────────┘           │
+                                                     │
+  └─────────────────────────────────────────────────┘</div>
+
+        <h3>2.4 权限系统与 HITL</h3>
+        <p>权限引擎采用<strong>三态决策</strong>模型：</p>
+        <ul>
+            <li><strong>ALLOW</strong> → 工具直接执行</li>
+            <li><strong>ASKING</strong> → 暂停，等待人类确认（HITL）</li>
+            <li><strong>DENY</strong> → 工具被拒绝，写入 "Permission denied" 结果</li>
+        </ul>
+
+        <h4>HITL 流程</h4>
+        <ol>
+            <li>模型请求调用工具 → 权限引擎评估</li>
+            <li>如果是 ASKING → Agent 发出 <code class="inline-code">RequireUserConfirmEvent</code> → 暂停</li>
+            <li>用户通过第二次 <code class="inline-code">call(msgs)</code> 携带 <code class="inline-code">ConfirmResult</code> 恢复</li>
+            <li><code class="inline-code">ConfirmResult(true)</code> → 工具状态变为 ALLOWED → 执行</li>
+            <li><code class="inline-code">ConfirmResult(false)</code> → 写入 DENIED 结果 → 继续循环</li>
+        </ol>
+
+        <h3>2.5 状态管理与 Session 持久化</h3>
+        <p>ReActAgent 使用 <code class="inline-code">(userId, sessionId)</code> 作为 slot 键，每个 slot 独立维护：</p>
+        <ul>
+            <li><strong>AgentState</strong> — 对话上下文 + 工具状态 + 权限上下文</li>
+            <li><strong>PermissionEngine</strong> — 独立的权限引擎实例</li>
+            <li><strong>slotVersions</strong> — 乐观并发控制版本号</li>
+        </ul>
+        <p>当配置了 <code class="inline-code">AgentStateStore</code> 时，每次 call 开始都会从存储重新加载状态，保证分布式部署下的一致性。</p>
+
+        <div class="checklist">
+            <h4>第二阶段学习检查清单</h4>
+            <ol>
+                <li><strong>消息模型</strong>：<code class="inline-code">Msg</code> 的 content 为什么是不可变 List？（线程安全）</li>
+                <li><strong>Role 校验</strong>：USER 消息能包含 ToolUseBlock 吗？（不能，只允许 text/data/image/audio/video）</li>
+                <li><strong>ReAct 循环</strong>：reasoning → acting → reasoning 的循环何时终止？（无工具调用 / 达到 maxIters / HITL stop / middleware stop）</li>
+                <li><strong>Middleware</strong>：5 个拦截阶段分别在什么时候触发？</li>
+                <li><strong>HITL</strong>：权限 ASKING 状态如何暂停和恢复 Agent？</li>
+                <li><strong>call() vs streamEvents()</strong>：它们共享什么核心？（buildAgentStream()）</li>
+            </ol>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- 第三阶段 -->
+    <section id="phase3" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p3">3</div>
+            <h2>掌握 agentscope-harness</h2>
+            <span class="time">建议 5-7 天</span>
+        </div>
+
+        <h3>3.1 HarnessAgent</h3>
+        <p>精读 <code class="inline-code">HarnessAgent.java</code>（2922 行）：</p>
+        <ul>
+            <li>理解它如何在 ReActAgent 之上叠加工程化能力</li>
+            <li>关注 Builder 模式和配置方式</li>
+        </ul>
+
+        <h3>3.2 Workspace 与文件系统</h3>
+        <ul>
+            <li><code class="inline-code">CompositeFilesystem.java</code> — 组合文件系统</li>
+            <li><code class="inline-code">LocalFilesystem.java</code> — 本地文件系统</li>
+            <li><code class="inline-code">BaseSandboxFilesystem.java</code> — 沙箱文件系统</li>
+        </ul>
+
+        <h3>3.3 Memory 与 Session 管理</h3>
+        <ul>
+            <li><code class="inline-code">MemoryConfig.java</code> — 记忆配置</li>
+            <li><code class="inline-code">SessionTree.java</code> — Session 树管理</li>
+            <li><code class="inline-code">ConversationCompactor.java</code> — 上下文压缩</li>
+        </ul>
+
+        <h3>3.4 Middleware 机制</h3>
+        <p>理解 5 个拦截阶段：onAgent / onReasoning / onActing / onModelCall / onSystemPrompt，关注 Middleware 链的编排方式。</p>
+
+        <h3>3.5 子 Agent 编排</h3>
+        <ul>
+            <li><code class="inline-code">agent_spawn</code> / <code class="inline-code">agent_send</code> 机制</li>
+            <li>同步与异步委派模式</li>
+        </ul>
+
+        <h3>3.6 Gateway 与 Channel</h3>
+        <ul>
+            <li><code class="inline-code">Gateway.java</code> — 网关接口</li>
+            <li><code class="inline-code">HarnessGateway.java</code> — 网关实现</li>
+            <li><code class="inline-code">Channel.java</code> — Channel 抽象（钉钉/飞书/企微）</li>
+        </ul>
+
+        <h3>3.7 实践：按顺序运行 harness 示例</h3>
+        <ol>
+            <li><code class="inline-code">WorkspaceSetupExample.java</code> — Workspace 基础</li>
+            <li><code class="inline-code">MemoryCompactionExample.java</code> — 记忆压缩</li>
+            <li><code class="inline-code">SubagentSendDirectlyExample.java</code> — 子 Agent</li>
+            <li><code class="inline-code">PlanModeAutoExample.java</code> — Plan Mode</li>
+        </ol>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- 第四阶段 -->
+    <section id="phase4" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p4">4</div>
+            <h2>扩展生态</h2>
+            <span class="time">建议 3-5 天</span>
+        </div>
+
+        <h3>4.1 模型提供商</h3>
+        <p>了解 <code class="inline-code">agentscope-extensions-model-*</code> 的模块化设计：</p>
+        <ul>
+            <li><code class="inline-code">model-openai</code> / <code class="inline-code">model-dashscope</code> / <code class="inline-code">model-anthropic</code> / <code class="inline-code">model-gemini</code> / <code class="inline-code">model-ollama</code></li>
+            <li>阅读其中一个实现，理解 ChatModel 接口的适配方式</li>
+        </ul>
+
+        <h3>4.2 状态持久化</h3>
+        <ul>
+            <li><code class="inline-code">agentscope-extensions-redis</code> — Redis 状态存储</li>
+            <li><code class="inline-code">agentscope-extensions-mysql</code> / <code class="inline-code">agentscope-extensions-postgresql</code> — 关系型数据库</li>
+            <li><code class="inline-code">agentscope-extensions-oss</code> / <code class="inline-code">agentscope-extensions-cos</code> — 对象存储</li>
+        </ul>
+
+        <h3>4.3 RAG 与 Knowledge</h3>
+        <ul>
+            <li>理解 Knowledge 接口和 RAG 模式</li>
+            <li>了解 dify / ragflow / haystack 等集成</li>
+        </ul>
+
+        <h3>4.4 协议支持</h3>
+        <ul>
+            <li>A2A（Agent-to-Agent）协议</li>
+            <li>AG-UI 协议</li>
+            <li>Agent Protocol</li>
+        </ul>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- 第五阶段 -->
+    <section id="phase5" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p5">5</div>
+            <h2>高级主题与综合实战</h2>
+            <span class="time">持续</span>
+        </div>
+
+        <h3>5.1 AgentScope Service</h3>
+        <ul>
+            <li>控制面架构</li>
+            <li>Agent 注册与发现</li>
+            <li>Dashboard 使用</li>
+        </ul>
+
+        <h3>5.2 分布式部署</h3>
+        <ul>
+            <li>无状态水平扩展方案</li>
+            <li>Session 恢复与跨副本路由</li>
+            <li>阅读 <code class="inline-code">DistributedStore.java</code></li>
+        </ul>
+
+        <h3>5.3 综合实战项目（递进练习）</h3>
+        <ol>
+            <li>用 <code class="inline-code">agentscope-core</code> 写一个纯 ReAct Agent（带自定义 Tool）</li>
+            <li>升级到 <code class="inline-code">agentscope-harness</code>，加上 Workspace + Memory + Skill</li>
+            <li>实现多 Agent 协作场景（子 Agent 编排）</li>
+            <li>接入 Channel（钉钉/飞书），做一个可交互的聊天机器人</li>
+            <li>部署为分布式服务，使用 Redis/MySQL 做状态持久化</li>
+        </ol>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- agentscope-paw -->
+    <section id="paw" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p1">A</div>
+            <h2>附录：agentscope-paw 解读</h2>
+        </div>
+
+        <div class="paw-section">
+            <h3>什么是 agentscope-paw？</h3>
+            <p><strong>AgentScope Paw</strong> 是 QwenPaw 的 Java 版本 — 一款装在你自己电脑上的个人助手。它以你的身份、在你的文件系统和 Shell 里干活，并且会随着使用慢慢"长大"。</p>
+
+            <table>
+                <thead><tr><th></th><th>paw</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>适用场景</strong></td><td>在自己笔记本/工作站上的个人助手</td></tr>
+                    <tr><td><strong>用户数</strong></td><td>1 人 — 你自己</td></tr>
+                    <tr><td><strong>隔离</strong></td><td>无 — 直接以你的身份运行，可访问你的 Shell</td></tr>
+                    <tr><td><strong>自进化</strong></td><td>✅ 技能、子智能体、记忆、AGENTS.md 都是 agent 自己写的工作区文件</td></tr>
+                    <tr><td><strong>通道</strong></td><td>内置 Web UI + 钉钉 · 企业微信 · 飞书 · GitHub · GitLab</td></tr>
+                    <tr><td><strong>分布式</strong></td><td>❌ 单进程、单节点</td></tr>
+                    <tr><td><strong>文件系统</strong></td><td>LocalFilesystemWithShell — 直连本机 FS + Shell</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>架构</h3>
+        <p>paw 是一个轻量的 Spring Boot 应用，把 <strong>HarnessAgent</strong> 直接挂载到 <code class="inline-code">LocalFilesystemWithShell</code> 之上。</p>
+        <div class="arch-diagram"><span class="hl-blue">┌─────────────────────────────────────────────────────────────────┐
+│                          你的本机                               │
+│  ┌─────────────────────┐   ┌─────────────────────────────────┐  │
+│  │  通道适配           │   │  <span class="hl-green">HarnessAgent</span>（每个 agent 一个）│  │
+│  │  ├ chatui (Web UI)  │──▶│   ├ 推理（LLM）                 │  │
+│  │  ├ dingtalk 钉钉    │   │   ├ Skills · Sub-agents · MCP   │  │
+│  │  ├ wecom · feishu   │   │   └ 自进化循环                  │  │
+│  │  └ github · gitlab  │   └────────────┬────────────────────┘  │
+│  └─────────────────────┘                ▼                       │
+│                          ┌──────────────────────────────────┐   │
+│                          │  <span class="hl-yellow">LocalFilesystemWithShell</span>        │   │
+│                          │   ├ 本机 FS（~/.agentscope/...） │   │
+│                          │   └ 本机 Shell（bash / zsh）     │   │
+│                          └──────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘</span></div>
+
+        <h3>与其他模块的关系</h3>
+        <table>
+            <thead><tr><th>项目</th><th>定位</th></tr></thead>
+            <tbody>
+                <tr><td><strong>agentscope-paw</strong></td><td>个人助手（单用户、本机运行）</td></tr>
+                <tr><td><strong>agentscope-service</strong></td><td>团队/企业版（多租户、分布式、Dashboard）</td></tr>
+                <tr><td><strong>agentscope-dataagent</strong></td><td>数据 Agent（需要沙箱隔离的场景）</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- 学习资源 -->
+    <section id="resources" class="phase">
+        <div class="phase-header">
+            <div class="phase-num p2">R</div>
+            <h2>学习资源汇总</h2>
+        </div>
+
+        <table class="resource-table">
+            <thead><tr><th>资源</th><th>链接/路径</th></tr></thead>
+            <tbody>
+                <tr><td>官方中文文档</td><td><a href="https://java.agentscope.io/v2/zh/intro.html">https://java.agentscope.io/v2/zh/intro.html</a></td></tr>
+                <tr><td>README 中文</td><td><code class="inline-code">README_zh.md</code></td></tr>
+                <tr><td>示例代码（最推荐）</td><td><code class="inline-code">agentscope-examples/documentation/src/main/java/.../documentation2/</code></td></tr>
+                <tr><td>快速入门示例</td><td><code class="inline-code">quickstart/BasicChatExample.java</code></td></tr>
+                <tr><td>DeepWiki 问答</td><td><a href="https://deepwiki.com/agentscope-ai/agentscope-java">https://deepwiki.com/agentscope-ai/agentscope-java</a></td></tr>
+                <tr><td>Discord 社区</td><td><a href="https://discord.gg/eYMpfnkG8h">https://discord.gg/eYMpfnkG8h</a></td></tr>
+            </tbody>
+        </table>
+
+        <div class="card highlight">
+            <h4>学习建议</h4>
+            <ol>
+                <li><strong>先跑示例，再读源码</strong> — 50 个示例覆盖所有核心特性，是最好的起点</li>
+                <li><strong>从 core 到 harness</strong> — 先理解底层 ReAct 循环，再理解上层工程化封装</li>
+                <li><strong>关注接口设计</strong> — 接口分层非常清晰（Agent → CallableAgent + StreamableAgent + ObservableAgent），理解接口就理解了设计哲学</li>
+                <li><strong>边学边写</strong> — 每学完一个模块，动手写一个小示例验证理解</li>
+            </ol>
+        </div>
+    </section>
+
+</div>
+
+<div style="text-align: center; padding: 30px; color: var(--text-muted); font-size: 0.85em; border-top: 1px solid var(--border);">
+    AgentScope Java 2.0 系统学习指南 · 基于 v2.0.3-SNAPSHOT 源码分析生成
+</div>
+
+</body>
+</html>
