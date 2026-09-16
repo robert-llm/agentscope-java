@@ -146,6 +146,12 @@
             <artifactId>agentscope-extensions-skill-git-repository</artifactId>
         </dependency>
 
+        <!-- aistio Data Plane SDK (for Service registration) -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-aistio</artifactId>
+        </dependency>
+
         <!-- Redis State Store (for distributed shared-store examples) -->
         <dependency>
             <groupId>io.agentscope</groupId>

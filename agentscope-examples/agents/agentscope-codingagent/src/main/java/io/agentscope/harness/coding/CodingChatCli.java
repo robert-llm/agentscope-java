@@ -20,6 +20,7 @@ import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.gateway.channel.chatui.ChatUiChannel;
+import io.agentscope.harness.agent.gateway.channel.chatui.SendOptions;
 import io.agentscope.harness.coding.tools.FetchUrlTool;
 import io.agentscope.harness.coding.tools.GitHubApiTool;
 import io.agentscope.harness.coding.tools.HttpRequestTool;
@@ -66,6 +67,9 @@ public class CodingChatCli {
     public static void main(String[] args) throws Exception {
         printBanner();
 
+        // Parse --user <userId> from command line, fallback to USER env var, then anonymous
+        String userId = resolveUserId(args);
+
         Path cwd = Paths.get(System.getProperty("user.dir"));
         Model model = buildModel();
 
@@ -92,6 +96,7 @@ public class CodingChatCli {
         ChatUiChannel chat = bootstrap.chatUiChannel();
 
         System.out.println(ANSI_GREEN + "✓ Coding Agent ready" + ANSI_RESET);
+        System.out.println("  User:      " + userId);
         System.out.println("  Workspace: " + CodingBootstrap.DEFAULT_WORKSPACE_ROOT);
         System.out.println(
                 "  Model: "
@@ -142,14 +147,14 @@ public class CodingChatCli {
 
                 if (line.startsWith("review ")) {
                     String prUrl = line.substring("review ".length()).trim();
-                    dispatchReviewer(chat, prUrl);
+                    dispatchReviewer(chat, userId, prUrl);
                     continue;
                 }
 
                 System.out.print(ANSI_YELLOW + "Agent> " + ANSI_RESET);
                 System.out.flush();
                 try {
-                    Msg reply = chat.send(line).block();
+                    Msg reply = chat.send(SendOptions.userId(userId), line).block();
                     if (reply != null) {
                         String text =
                                 reply.getContent().stream()
@@ -168,7 +173,7 @@ public class CodingChatCli {
         bootstrap.stop();
     }
 
-    private static void dispatchReviewer(ChatUiChannel chat, String prUrl) {
+    private static void dispatchReviewer(ChatUiChannel chat, String userId, String prUrl) {
         if (prUrl.isBlank()) {
             System.err.println("[Error] Usage: review <pr_url>");
             return;
@@ -178,7 +183,7 @@ public class CodingChatCli {
         String reviewPrompt =
                 "Please review the following pull request and provide detailed feedback: " + prUrl;
         try {
-            Msg reply = chat.send(reviewPrompt).block();
+            Msg reply = chat.send(SendOptions.userId(userId), reviewPrompt).block();
             if (reply != null) {
                 String text =
                         reply.getContent().stream()
@@ -203,5 +208,25 @@ public class CodingChatCli {
         System.out.println("  ║        AgentScope Coding Agent CLI        ║");
         System.out.println("  ╚═══════════════════════════════════════════╝");
         System.out.println(ANSI_RESET);
+    }
+
+    /**
+     * Resolves the userId from command line args ({@code --user <id>}), then {@code USER}
+     * environment variable, falling back to {@code "__anonymous__"}.
+     */
+    private static String resolveUserId(String[] args) {
+        // 1. --user <id>
+        for (int i = 0; i < args.length - 1; i++) {
+            if ("--user".equals(args[i])) {
+                return args[i + 1].trim();
+            }
+        }
+        // 2. USER env var
+        String envUser = System.getenv("USER");
+        if (envUser != null && !envUser.isBlank()) {
+            return envUser.trim();
+        }
+        // 3. Fallback
+        return "__anonymous__";
     }
 }
