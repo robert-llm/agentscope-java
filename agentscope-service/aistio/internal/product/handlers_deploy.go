@@ -388,6 +388,7 @@ func (s *Server) fireDeployment(ctx context.Context, d deployRow, message string
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Builder-Internal-Token", s.cfg.InternalToken)
+			req.Header.Set("X-Builder-Internal-User", d.OwnerID)
 			client := &http.Client{Timeout: 15 * time.Second}
 			resp, err := client.Do(req)
 			if err != nil {

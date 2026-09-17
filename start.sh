@@ -11,7 +11,9 @@ export PATH=$JAVA_HOME/bin:$PATH
 #export BUILDER_DATAPLANE_REGISTER="true"
 #export BUILDER_DATAPLANE_PUBLIC_URL="http://localhost:8082"
 
+#重新编译 用这个传参
 #agentscope-service/scripts/dev-down.sh && BUILDER_REBUILD=1 agentscope-service/scripts/dev-up.sh
+
 agentscope-service/scripts/dev-down.sh && agentscope-service/scripts/dev-up.sh
 
 
