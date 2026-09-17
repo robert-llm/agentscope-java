@@ -15,25 +15,25 @@
  */
 package io.agentscope.examples.documentation2.quickstart;
 
-import io.agentscope.core.ReActAgent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.UserMessage;
-import io.agentscope.core.state.JsonFileAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.extensions.aistio.Aistio;
 import io.agentscope.extensions.aistio.AistioConfig;
 import io.agentscope.extensions.aistio.SessionBridge;
 import io.agentscope.extensions.aistio.adapter.AgentScopeAdapter;
+import io.agentscope.harness.agent.HarnessAgent;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.nio.file.Paths;
 
 /**
  * BasicChatWithServiceExample - Interactive chat registered with AgentScope Service.
  *
  * <p>Demonstrates:
  * <ul>
- *   <li>Creating an agent with aistio observation middleware</li>
+ *   <li>Creating a {@link HarnessAgent} with workspace, memory and aistio middleware</li>
  *   <li>Registering the agent to the Service control plane via HTTP self-registration</li>
  *   <li>Interactive streaming chat visible in the Service console</li>
  * </ul>
@@ -100,16 +100,22 @@ public class BasicChatWithServiceExample {
         // Step 1: Create the adapter (provides observation middleware)
         AgentScopeAdapter adapter = new AgentScopeAdapter();
 
-        // Step 2: Build the agent with the aistio middleware
-        //   The middleware must be registered at build time so that the
-        //   Level-2 event stream is captured.
-        ReActAgent agent =
-                ReActAgent.builder()
+        // Step 2: Build a HarnessAgent with workspace + aistio middleware
+        //   HarnessAgent wraps ReActAgent and adds workspace management,
+        //   memory (flush + consolidation), skills, and session persistence.
+        //   State is auto-persisted to ~/.agentscope/state/<agentId>/.
+        String workspaceDir =
+                Paths.get(System.getProperty("user.home"), ".agentscope", "basic-chat", "workspace")
+                        .toString();
+
+        System.out.println("Workspace: " + workspaceDir);
+        HarnessAgent agent =
+                HarnessAgent.builder()
                         .name("Assistant")
                         .sysPrompt("You are a helpful AI assistant. Be friendly and concise.")
                         .model("dashscope:qwen-plus")
                         .toolkit(new Toolkit())
-                        .stateStore(new JsonFileAgentStateStore())
+                        .workspace(workspaceDir)
                         .middleware(adapter.middleware())
                         .build();
 
