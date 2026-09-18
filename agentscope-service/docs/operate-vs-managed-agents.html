@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentScope Service - Operate 与 Managed Agents 双系统架构</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.7;
+            color: #1a1a2e;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #0f766e, #059669);
+            color: #fff;
+            padding: 40px 48px;
+        }
+        .header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 8px; }
+        .header p { opacity: 0.9; font-size: 0.95rem; }
+        .content { padding: 40px 48px; }
+        h2 {
+            font-size: 1.4rem;
+            color: #0f766e;
+            margin: 32px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        h2:first-child { margin-top: 0; }
+        h3 { font-size: 1.1rem; color: #334155; margin: 24px 0 12px; }
+        p { margin: 10px 0; color: #475569; }
+        ul, ol { margin: 10px 0 10px 24px; color: #475569; }
+        li { margin: 6px 0; }
+
+        /* 核心区别对比卡片 */
+        .core-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 24px 0;
+        }
+        .core-card {
+            border-radius: 14px;
+            padding: 24px;
+            border: 1px solid #e2e8f0;
+        }
+        .core-card-operate {
+            background: linear-gradient(135deg, #f0fdfa, #ecfdf5);
+            border-color: #99f6e4;
+        }
+        .core-card-managed {
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-color: #93c5fd;
+        }
+        .core-card h3 {
+            margin: 0 0 12px;
+            font-size: 1.15rem;
+        }
+        .core-card .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .tag-operate { background: #ccfbf1; color: #0f766e; }
+        .tag-managed { background: #bfdbfe; color: #1e40af; }
+        .core-card .analogy {
+            font-style: italic;
+            color: #64748b;
+            font-size: 0.9rem;
+            margin: 8px 0;
+            padding-left: 12px;
+            border-left: 3px solid #cbd5e1;
+        }
+        .core-card dl {
+            margin: 12px 0 0;
+        }
+        .core-card dt {
+            font-weight: 600;
+            color: #334155;
+            font-size: 0.85rem;
+            margin-top: 8px;
+        }
+        .core-card dd {
+            color: #475569;
+            font-size: 0.9rem;
+            margin: 2px 0 0 0;
+        }
+
+        /* 表格 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.9rem;
+        }
+        th {
+            background: #f1f5f9;
+            color: #334155;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #475569;
+        }
+        tr:hover td { background: #f8fafc; }
+
+        /* 流程图 */
+        .flow-diagram {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 20px 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.82rem;
+            line-height: 1.8;
+            white-space: pre;
+            overflow-x: auto;
+            color: #334155;
+        }
+
+        /* 场景卡片 */
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .scenario-card {
+            border-radius: 12px;
+            padding: 18px 20px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+        .scenario-card h4 {
+            font-size: 0.92rem;
+            color: #334155;
+            margin: 0 0 6px;
+        }
+        .scenario-card p {
+            font-size: 0.85rem;
+            margin: 0;
+            color: #64748b;
+        }
+
+        /* 提示框 */
+        .tip {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin: 16px 0;
+        }
+        .tip-title {
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 6px;
+        }
+        .info-box {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin: 16px 0;
+        }
+        .info-box-title {
+            font-weight: 700;
+            color: #075985;
+            margin-bottom: 6px;
+        }
+        .summary-box {
+            background: linear-gradient(135deg, #f0fdfa, #ecfdf5);
+            border: 1px solid #99f6e4;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin: 24px 0;
+        }
+        .summary-box h3 {
+            color: #0f766e;
+            margin: 0 0 10px;
+            font-size: 1.05rem;
+        }
+        .summary-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0;
+            font-size: 0.92rem;
+            color: #334155;
+        }
+        .summary-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .inline-code {
+            background: #f1f5f9;
+            color: #0f766e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-family: monospace;
+        }
+        .section-divider {
+            border: none;
+            border-top: 2px dashed #e2e8f0;
+            margin: 40px 0;
+        }
+        @media (max-width: 700px) {
+            .core-compare, .scenario-grid { grid-template-columns: 1fr; }
+            .content { padding: 24px; }
+            .header { padding: 28px 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Operate (Dashboard) vs Managed Agents</h1>
+            <p>AgentScope Service 控制台的双系统架构设计与使用场景</p>
+        </div>
+
+        <div class="content">
+            <!-- 核心区别 -->
+            <h2>核心区别</h2>
+
+            <div class="core-compare">
+                <div class="core-card core-card-operate">
+                    <span class="tag tag-operate">Operate / Dashboard</span>
+                    <h3>运行中的进程</h3>
+                    <div class="analogy">类比：Kubernetes 中的 Pod（运行实例）</div>
+                    <dl>
+                        <dt>数据源</dt>
+                        <dd>dataplane 注册表（内存，运行时）</dd>
+                        <dt>API</dt>
+                        <dd><code class="inline-code">/api/v1/agents</code></dd>
+                        <dt>创建方式</dt>
+                        <dd>Java 代码通过 Aistio SDK 自注册</dd>
+                        <dt>生命周期</dt>
+                        <dd>进程在就在，进程挂了就消失</dd>
+                        <dt>关注点</dt>
+                        <dd>存活状态、副本数、健康度、心跳</dd>
+                    </dl>
+                </div>
+
+                <div class="core-card core-card-managed">
+                    <span class="tag tag-managed">Managed Agents</span>
+                    <h3>版本化的配置定义</h3>
+                    <div class="analogy">类比：Kubernetes 中的 Deployment（声明式配置）</div>
+                    <dl>
+                        <dt>数据源</dt>
+                        <dd>产品数据库 cp.agents 表（持久化）</dd>
+                        <dt>API</dt>
+                        <dd><code class="inline-code">/api/agents</code></dd>
+                        <dt>创建方式</dt>
+                        <dd>控制台 UI 或 POST /api/agents</dd>
+                        <dt>生命周期</dt>
+                        <dd>持久存在，不依赖任何进程</dd>
+                        <dt>关注点</dt>
+                        <dd>系统提示词、模型、工具、会话历史</dd>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- 详细对比表 -->
+            <h2>详细对比</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>维度</th>
+                        <th>Operate (Dashboard)</th>
+                        <th>Managed Agents</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>本质</strong></td>
+                        <td>一个运行中的进程实例</td>
+                        <td>一份版本化的配置定义</td>
+                    </tr>
+                    <tr>
+                        <td><strong>API 前缀</strong></td>
+                        <td><code class="inline-code">/api/v1/agents</code></td>
+                        <td><code class="inline-code">/api/agents</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>存储</strong></td>
+                        <td>内存（dataplane registry）</td>
+                        <td>PostgreSQL（cp.agents 表）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>创建者</strong></td>
+                        <td>Agent 进程自身（自注册）</td>
+                        <td>用户（控制台或 API）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>执行方式</strong></td>
+                        <td>自己的进程执行</td>
+                        <td>共享 service-dataplane 懒加载</td>
+                    </tr>
+                    <tr>
+                        <td><strong>持久性</strong></td>
+                        <td>临时的（重启消失）</td>
+                        <td>持久的（数据库存储）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>版本管理</strong></td>
+                        <td>无</td>
+                        <td>支持（agent_versions 表）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Session 对话</strong></td>
+                        <td>❌ 不支持</td>
+                        <td>✅ 支持</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Deployment 发布</strong></td>
+                        <td>❌ 不支持</td>
+                        <td>✅ 支持</td>
+                    </tr>
+                    <tr>
+                        <td><strong>视角</strong></td>
+                        <td>SRE / 平台运维</td>
+                        <td>构建者 / 最终用户</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr class="section-divider">
+
+            <!-- 架构图 -->
+            <h2>架构流程</h2>
+
+            <h3>Operate (Dashboard) — 自注册 & 监控</h3>
+            <div class="flow-diagram">你的 Java 应用（Agent 进程）
+    │
+    │  Aistio SDK 自注册
+    ▼
+dataplane registry（内存注册表）
+    │
+    │  轮询 /agentscope/* 获取状态
+    ▼
+Dashboard 展示：
+  • 实例数 / 副本数
+  • 健康状态（healthy / unhealthy）
+  • 心跳状态
+  • 合约级别（contractLevel）
+  • 活跃 session 数</div>
+
+            <h3>Managed Agents — 配置定义 & 对话执行</h3>
+            <div class="flow-diagram">控制台 UI / API 创建
+    │
+    ▼
+产品数据库 cp.agents 表：
+  • 名称、描述
+  • 系统提示词
+  • 模型配置
+  • 工具 / 技能 / MCP
+  • 版本号
+  • 工作区
+    │
+    │  用户创建 Session 时
+    ▼
+service-dataplane 懒加载执行：
+  resolveSession → HarnessAgent → 运行 Agent</div>
+
+            <hr class="section-divider">
+
+            <!-- 使用场景 -->
+            <h2>使用场景</h2>
+
+            <h3>Operate (Dashboard) 适合</h3>
+            <div class="scenario-grid">
+                <div class="scenario-card">
+                    <h4>自带 Agent 框架</h4>
+                    <p>你有自己的 Agent 实现（如 agentscope-paw），通过 SDK 注册到平台</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>运维监控</h4>
+                    <p>查看 Agent 实例的运行状态、健康度、副本数</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>自定义运行时</h4>
+                    <p>你的 Agent 有特殊运行时需求，需要自己管理进程生命周期</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>BYO（Bring Your Own）</h4>
+                    <p>自带 Agent 接入平台的基础设施监控</p>
+                </div>
+            </div>
+
+            <h3>Managed Agents 适合</h3>
+            <div class="scenario-grid">
+                <div class="scenario-card">
+                    <h4>控制台创建 Agent</h4>
+                    <p>在 UI 中配置 Agent 的提示词、模型、工具</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>Session 对话</h4>
+                    <p>通过 Session API 或控制台 Chat 面板直接对话</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>Deployment 发布</h4>
+                    <p>创建 webhook / cron / manual 触发器</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>版本管理</h4>
+                    <p>Agent 配置的版本控制和回滚</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>多用户共享</h4>
+                    <p>多个用户共享同一个 Agent 定义</p>
+                </div>
+                <div class="scenario-card">
+                    <h4>业务系统集成</h4>
+                    <p>通过 Session API 程序化调用</p>
+                </div>
+            </div>
+
+            <hr class="section-divider">
+
+            <!-- 总结 -->
+            <div class="summary-box">
+                <h3>一句话总结</h3>
+                <div class="summary-row">
+                    <span class="summary-icon">🔍</span>
+                    <span><strong>Operate</strong> = "你的 Agent 进程在跑吗？"（运维视角 — 监控运行状态）</span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-icon">🛠️</span>
+                    <span><strong>Managed Agents</strong> = "你的 Agent 应该怎么工作？"（产品视角 — 定义对话能力）</span>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <div class="info-box-title">两套系统不互通</div>
+                <p>通过 Java SDK 注册的 Agent 只出现在 Dashboard 中，不能直接用 Session API 对话或 Deployment 发布。如果需要这些功能，需要在 Managed Agents 中创建对应的 Agent 定义。</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

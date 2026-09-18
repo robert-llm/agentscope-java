@@ -1,0 +1,201 @@
+{
+  "orders": [
+    {
+      "orderId": "O-1001",
+      "status": "awaiting_stock",
+      "version": 3,
+      "sku": "SKU-A100",
+      "quantity": 8,
+      "source": "web",
+      "customerId": "C-2001",
+      "createdAt": "2026-09-10T08:30:00Z",
+      "promisedArrival": "2026-09-14",
+      "currentWarehouse": "W-A",
+      "notes": "Customer requested delivery by 2026-09-15"
+    },
+    {
+      "orderId": "O-1002",
+      "status": "shipped",
+      "version": 5,
+      "sku": "SKU-B200",
+      "quantity": 2,
+      "source": "mobile",
+      "customerId": "C-2002",
+      "createdAt": "2026-09-08T14:00:00Z",
+      "promisedArrival": "2026-09-16",
+      "currentWarehouse": "W-B",
+      "notes": "In transit"
+    },
+    {
+      "orderId": "O-1003",
+      "status": "cancelled",
+      "version": 2,
+      "sku": "SKU-C300",
+      "quantity": 1,
+      "source": "web",
+      "customerId": "C-2003",
+      "createdAt": "2026-09-05T10:00:00Z",
+      "promisedArrival": null,
+      "currentWarehouse": null,
+      "notes": "Cancelled by customer"
+    }
+  ],
+  "inventory": [
+    {
+      "sku": "SKU-A100",
+      "warehouses": [
+        {
+          "warehouseId": "W-A",
+          "available": 0,
+          "reserved": 0,
+          "capacity": 500,
+          "lastUpdated": "2026-09-14T06:00:00Z"
+        },
+        {
+          "warehouseId": "W-B",
+          "available": 8,
+          "reserved": 2,
+          "capacity": 300,
+          "lastUpdated": "2026-09-14T06:00:00Z"
+        },
+        {
+          "warehouseId": "W-C",
+          "available": 3,
+          "reserved": 0,
+          "capacity": 200,
+          "lastUpdated": "2026-09-14T06:00:00Z"
+        }
+      ],
+      "transferPolicy": "Requires approval for cross-warehouse transfer"
+    },
+    {
+      "sku": "SKU-B200",
+      "warehouses": [
+        {
+          "warehouseId": "W-A",
+          "available": 15,
+          "reserved": 5,
+          "capacity": 500,
+          "lastUpdated": "2026-09-14T06:00:00Z"
+        },
+        {
+          "warehouseId": "W-B",
+          "available": 20,
+          "reserved": 0,
+          "capacity": 300,
+          "lastUpdated": "2026-09-14T06:00:00Z"
+        }
+      ],
+      "transferPolicy": "Standard transfer allowed"
+    },
+    {
+      "sku": "SKU-C300",
+      "warehouses": [
+        {
+          "warehouseId": "W-A",
+          "available": 0,
+          "reserved": 0,
+          "capacity": 500,
+          "lastUpdated": "2026-09-14T06:00:00Z"
+        }
+      ],
+      "transferPolicy": "Discontinued SKU — no transfers"
+    }
+  ],
+  "logistics": [
+    {
+      "orderId": "O-1001",
+      "trackingNumber": null,
+      "status": "no_shipment",
+      "events": [],
+      "estimatedArrival": null,
+      "guaranteed": false,
+      "candidates": [
+        {
+          "route": "W-B -> Customer",
+          "earliestArrival": "2026-09-16",
+          "guaranteed": false
+        },
+        {
+          "route": "W-C -> Customer",
+          "earliestArrival": "2026-09-17",
+          "guaranteed": false
+        }
+      ]
+    },
+    {
+      "orderId": "O-1002",
+      "trackingNumber": "TRK-99887766",
+      "status": "in_transit",
+      "events": [
+        {
+          "timestamp": "2026-09-12T09:00:00Z",
+          "location": "W-B",
+          "description": "Picked up from warehouse"
+        },
+        {
+          "timestamp": "2026-09-13T14:30:00Z",
+          "location": "Hub-Central",
+          "description": "Arrived at sorting hub"
+        },
+        {
+          "timestamp": "2026-09-14T08:00:00Z",
+          "location": "Hub-Central",
+          "description": "Delayed due to weather"
+        }
+      ],
+      "estimatedArrival": "2026-09-17",
+      "guaranteed": false
+    },
+    {
+      "orderId": "O-1003",
+      "trackingNumber": null,
+      "status": "cancelled",
+      "events": [
+        {
+          "timestamp": "2026-09-06T11:00:00Z",
+          "location": "W-A",
+          "description": "Shipment cancelled by customer"
+        }
+      ],
+      "estimatedArrival": null,
+      "guaranteed": false
+    }
+  ],
+  "policies": [
+    {
+      "action": "warehouse_transfer",
+      "allowed": true,
+      "requiresApproval": true,
+      "approvalLevel": "operations_manager",
+      "policyVersion": "2.1",
+      "conditions": [
+        "Source warehouse must have available stock",
+        "Target warehouse must have capacity",
+        "Customer must be notified of new estimated arrival"
+      ]
+    },
+    {
+      "action": "expedite_shipment",
+      "allowed": true,
+      "requiresApproval": true,
+      "approvalLevel": "logistics_lead",
+      "policyVersion": "1.3",
+      "conditions": [
+        "Express carrier must be available",
+        "Additional cost must be approved"
+      ]
+    },
+    {
+      "action": "cancel_and_refund",
+      "allowed": true,
+      "requiresApproval": false,
+      "approvalLevel": null,
+      "policyVersion": "1.0",
+      "conditions": [
+        "Order must not be in 'delivered' status"
+      ]
+    }
+  ],
+  "resolutions": []
+}
