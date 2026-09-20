@@ -48,6 +48,7 @@ public class OrderAgentApp {
 
     private static final Logger log = LoggerFactory.getLogger(OrderAgentApp.class);
     private static final String AGENT_KEY = "order-agent";
+    private static final int CONTRACT_PORT = 18092;
 
     public static void main(String[] args) throws Exception {
         log.info("Starting {} ...", AGENT_KEY);
@@ -64,7 +65,8 @@ public class OrderAgentApp {
 
         // 4. Register with Service (no TeamClient — this is a member, not the leader)
         SessionBridge bridge =
-                OrderFulfillmentExample.registerWithService(agent, adapter, AGENT_KEY, null);
+                OrderFulfillmentExample.registerWithService(
+                        agent, adapter, AGENT_KEY, null, CONTRACT_PORT);
 
         log.info("{} is running. Open the Service console to interact.", AGENT_KEY);
         log.info("Press Ctrl+C to stop.");

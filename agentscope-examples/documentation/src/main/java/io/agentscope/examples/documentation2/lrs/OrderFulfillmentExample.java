@@ -26,6 +26,8 @@ import io.agentscope.extensions.aistio.AistioConfig;
 import io.agentscope.extensions.aistio.SessionBridge;
 import io.agentscope.extensions.aistio.adapter.AgentScopeAdapter;
 import io.agentscope.extensions.aistio.adapter.HarnessTeamSessionStarter;
+import io.agentscope.extensions.aistio.store.ControlPlaneTeamClient;
+import io.agentscope.extensions.aistio.transport.ControlPlaneHttpClient;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.team.TeamClient;
 import java.io.IOException;
@@ -74,8 +76,7 @@ public final class OrderFulfillmentExample {
     private static final Logger log = LoggerFactory.getLogger(OrderFulfillmentExample.class);
 
     /** Default internal token matching the source docker-compose default. */
-    public static final String DEFAULT_INTERNAL_TOKEN =
-            "local-dev-internal-token-at-least-32chars";
+    public static final String DEFAULT_INTERNAL_TOKEN = "local-dev-internal-token-at-least-32chars";
 
     private final BusinessDataStore dataStore;
 
@@ -97,6 +98,10 @@ public final class OrderFulfillmentExample {
                 .workspace(agentWorkspace("fulfillment-lead"))
                 .middleware(adapter.middleware())
                 .maxIters(20)
+                .disableFilesystemTools()
+                .disableShellTool()
+                .disableSubagents()
+                .disableMemoryTools()
                 .build();
     }
 
@@ -187,25 +192,42 @@ public final class OrderFulfillmentExample {
      * @param agent the agent to register
      * @param adapter the adapter (already wired as middleware on the agent)
      * @param agentKey the agent key to register with (e.g. "order-agent")
-     * @param teamClient the TeamClient for collaboration (may be null for non-team agents)
+     * @param teamClient the TeamClient for collaboration (if null, a default one is created
+     *     automatically so the agent can handle team_join / team_leave commands)
+     * @param defaultContractPort default contract HTTP port (overridable via AISTIO_CONTRACT_PORT env)
      * @return the SessionBridge (call close() on shutdown)
      */
     public static SessionBridge registerWithService(
-            HarnessAgent agent, AgentScopeAdapter adapter, String agentKey, TeamClient teamClient) {
+            HarnessAgent agent,
+            AgentScopeAdapter adapter,
+            String agentKey,
+            TeamClient teamClient,
+            int defaultContractPort) {
         String controlPlaneHttp = envOr("AISTIO_CONTROL_PLANE_HTTP", "http://localhost:8081");
         String internalToken = envOr("BUILDER_INTERNAL_TOKEN", DEFAULT_INTERNAL_TOKEN);
-        int contractPort = Integer.parseInt(envOr("AISTIO_CONTRACT_PORT", "18090"));
+        int contractPort =
+                Integer.parseInt(
+                        envOr("AISTIO_CONTRACT_PORT", String.valueOf(defaultContractPort)));
 
-        // Enable Team collaboration if a TeamClient is provided
-        if (teamClient != null) {
-            adapter.setTeamSessionStarter(new HarnessTeamSessionStarter(() -> agent, teamClient));
+        // Auto-create a default TeamClient if none provided, so ALL agents can handle team_join
+        if (teamClient == null) {
+            ControlPlaneHttpClient httpClient =
+                    new ControlPlaneHttpClient(controlPlaneHttp, internalToken);
+            teamClient = new ControlPlaneTeamClient(httpClient);
         }
+
+        // Enable Team collaboration for all agents (leader and workers)
+        adapter.setTeamSessionStarter(new HarnessTeamSessionStarter(() -> agent, teamClient));
+
+        // Build a unique instanceId so multiple agents on the same host don't overwrite each other
+        String instanceId = uniqueInstanceId(agentKey);
 
         AistioConfig config =
                 AistioConfig.builder(agentKey)
                         .controlPlaneHttp(controlPlaneHttp)
                         .internalToken(internalToken)
                         .namespace("default")
+                        .instanceId(instanceId)
                         .enableEvents(true)
                         .contractHttpPort(contractPort)
                         .startGrpc(false)
@@ -243,25 +265,44 @@ public final class OrderFulfillmentExample {
         You are the Fulfillment Lead Agent — the coordinator of an order-fulfillment \
         investigation team.
 
-        Your team members are:
-        - order-agent: queries order status, version, and changes
-        - inventory-agent: queries warehouse stock levels
-        - logistics-agent: queries shipping and delivery status
-        - after-sales-agent: queries policies and manages resolution tickets
+        ## Language
 
-        Your workflow:
-        1. Clarify the customer's order and concern.
-        2. Delegate investigation to the appropriate team members \
-           (order, inventory, logistics, after-sales) as needed.
-        3. All facts must cite their business source, version, or query time. \
-           Distinguish between estimated and confirmed information.
+        Always respond in Chinese (简体中文). Match the user's language for all outputs.
 
-        Phase rules:
+        ## Team Coordination
+
+        You MUST use the `team` tool to coordinate with your team members. \
+        Do NOT try to investigate orders yourself — delegate to the right agent.
+
+        Available team members:
+        - **order-agent**: queries order status, version, source channel, promised dates
+        - **inventory-agent**: queries warehouse stock levels and transfer conditions
+        - **logistics-agent**: queries shipping nodes, tracking, estimated arrival
+        - **after-sales-agent**: queries policies, creates resolution tickets
+
+        Your workflow using the `team` tool:
+        1. Parse the customer's request to identify the order and concern.
+        2. Call team(action="createTask", subject="...", description="...", owner="<member>") \
+           to create tasks and assign them to the right members.
+           Example: team(action="createTask", subject="Check order O-1001 status", \
+           description="Query order status, version, and promised delivery date", \
+           owner="order-agent")
+        3. Call team(action="listTasks") to monitor task progress.
+        4. When all tasks are settled, synthesize a unified report.
+
+        ## Rules
+
+        - Do NOT use filesystem tools, shell, or memory tools — they are disabled.
+        - Do NOT try to spawn subagents — use the `team` tool instead.
+        - All facts must cite their business source, version, or query time.
+        - Distinguish between estimated and confirmed information.
+
+        ## Phase rules
+
         - DIAGNOSE phase: only propose solutions. Do NOT modify orders or \
           create resolution tickets.
         - EXECUTE phase: only execute the approved, exact plan. Re-check \
-          order version, stock, and delivery feasibility before acting. \
-          After business actions, query real results.
+          order version, stock, and delivery feasibility before acting.
 
         Output a unified report covering:
         - Root cause with evidence
@@ -269,14 +310,14 @@ public final class OrderFulfillmentExample {
         - Execution results (if in execute phase)
         - Pending items and follow-ups
 
-        If a failure occurs, report what was completed and what was not. \
-        Do not repeat writes. Do not treat model output as business authorization.
+        If a failure occurs, report what was completed and what was not.
         """;
     }
 
     public static String orderAgentPrompt() {
         return """
         You are the Order Agent in an order-fulfillment team.
+        Always respond in Chinese (简体中文).
 
         Your role is to query order information (status, version, source channel, \
         promised dates) and execute allowed order changes.
@@ -293,6 +334,7 @@ public final class OrderFulfillmentExample {
     public static String inventoryAgentPrompt() {
         return """
         You are the Inventory Agent in an order-fulfillment team.
+        Always respond in Chinese (简体中文).
 
         Your role is to query available stock across warehouses and report per-warehouse \
         quantities, constraints, and transfer conditions.
@@ -310,6 +352,7 @@ public final class OrderFulfillmentExample {
     public static String logisticsAgentPrompt() {
         return """
         You are the Logistics Agent in an order-fulfillment team.
+        Always respond in Chinese (简体中文).
 
         Your role is to query logistics status: tracking numbers, transit events, \
         estimated arrival, and whether dates are guaranteed.
@@ -326,6 +369,7 @@ public final class OrderFulfillmentExample {
     public static String afterSalesAgentPrompt() {
         return """
         You are the After-Sales Agent in an order-fulfillment team.
+        Always respond in Chinese (简体中文).
 
         Your role is to query business policies, create resolution tickets, and check \
         resolution execution status.
@@ -359,5 +403,19 @@ public final class OrderFulfillmentExample {
     public static String envOr(String name, String defaultValue) {
         String v = System.getenv(name);
         return (v != null && !v.isBlank()) ? v : defaultValue;
+    }
+
+    /**
+     * Build a unique instanceId per agent so that multiple agents running on the same host register
+     * as distinct data-plane instances in the control plane.
+     */
+    private static String uniqueInstanceId(String agentKey) {
+        String host;
+        try {
+            host = java.net.InetAddress.getLocalHost().getHostName();
+        } catch (java.net.UnknownHostException e) {
+            host = "localhost";
+        }
+        return host + "-" + agentKey;
     }
 }

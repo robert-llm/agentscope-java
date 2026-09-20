@@ -37,6 +37,7 @@ public class InventoryAgentApp {
 
     private static final Logger log = LoggerFactory.getLogger(InventoryAgentApp.class);
     private static final String AGENT_KEY = "inventory-agent";
+    private static final int CONTRACT_PORT = 18093;
 
     public static void main(String[] args) throws Exception {
         log.info("Starting {} ...", AGENT_KEY);
@@ -47,7 +48,8 @@ public class InventoryAgentApp {
         HarnessAgent agent = example.buildInventoryAgent(adapter);
 
         SessionBridge bridge =
-                OrderFulfillmentExample.registerWithService(agent, adapter, AGENT_KEY, null);
+                OrderFulfillmentExample.registerWithService(
+                        agent, adapter, AGENT_KEY, null, CONTRACT_PORT);
 
         log.info("{} is running. Open the Service console to interact.", AGENT_KEY);
         log.info("Press Ctrl+C to stop.");
