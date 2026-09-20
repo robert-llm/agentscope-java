@@ -125,10 +125,14 @@ public class FulfillmentLeadApp {
                 OrderFulfillmentExample.registerWithService(
                         agent, adapter, AGENT_KEY, teamClient, CONTRACT_PORT);
 
-        // 6. Pre-register team tools for HTTP API coordination
-        setupTeamTools(agent, teamClient);
+        // 6. Discover actual team name from control plane
+        String discoveredTeamName = discoverTeamName(httpClient);
+        log.info("Using team name: {}", discoveredTeamName);
 
-        // 7. Test model connectivity
+        // 7. Pre-register team tools for HTTP API coordination
+        setupTeamTools(agent, teamClient, discoveredTeamName);
+
+        // 8. Test model connectivity
         log.info("Testing model connectivity (dashscope:qwen-plus)...");
         try {
             Msg testMsg = Msg.builder().role(MsgRole.USER).textContent("Hi").build();
@@ -147,7 +151,7 @@ public class FulfillmentLeadApp {
             log.error("Model test FAILED: {} — agent will not work!", e.getMessage());
         }
 
-        // 8. Start public HTTP API server
+        // 9. Start public HTTP API server
         HttpServer apiServer = startApiServer(agent);
 
         log.info("============================================");
@@ -158,7 +162,7 @@ public class FulfillmentLeadApp {
         log.info("============================================");
         log.info("Press Ctrl+C to stop.");
 
-        // 7. Keep alive until shutdown
+        // 10. Keep alive until shutdown
         final HttpServer finalApiServer = apiServer;
         Runtime.getRuntime()
                 .addShutdownHook(
@@ -252,13 +256,67 @@ public class FulfillmentLeadApp {
     }
 
     /**
+     * Discovers the team name from the control plane by finding which team contains this agent as a
+     * member. Falls back to TEAM_NAME env var or "OrderFulfillmentTeam" if discovery fails.
+     */
+    private static String discoverTeamName(ControlPlaneHttpClient httpClient) {
+        String namespace = "default";
+        try {
+            ControlPlaneHttpClient.Response resp =
+                    httpClient.send("GET", "/api/v1/teams?namespace=" + namespace, null);
+            if (resp.status() != 200) {
+                log.warn("Failed to list teams: HTTP {} {}", resp.status(), resp.body());
+                return TEAM_NAME;
+            }
+            var root = ControlPlaneHttpClient.mapper().readTree(resp.body());
+            var items = root.path("items");
+            log.info("Found {} team(s) on control plane", items.size());
+            for (var item : items) {
+                String teamName = item.path("name").asText();
+                String phase = item.path("phase").asText();
+                int memberCount = item.path("memberCount").asInt();
+                log.info("  Team: {} (phase={}, members={})", teamName, phase, memberCount);
+                // Check if fulfillment-lead is a member of this team
+                ControlPlaneHttpClient.Response membersResp =
+                        httpClient.send(
+                                "GET",
+                                "/api/v1/teams/"
+                                        + java.net.URLEncoder.encode(teamName, "UTF-8")
+                                        + "/members?namespace="
+                                        + namespace,
+                                null);
+                if (membersResp.status() == 200) {
+                    var membersRoot = ControlPlaneHttpClient.mapper().readTree(membersResp.body());
+                    for (var member : membersRoot.path("members")) {
+                        String agentRef = member.path("agentRef").asText();
+                        String memberName = member.path("name").asText();
+                        if ("fulfillment-lead".equals(agentRef)) {
+                            log.info(
+                                    "Discovered team: {} (member={}, agentRef={})",
+                                    teamName,
+                                    memberName,
+                                    agentRef);
+                            return teamName;
+                        }
+                    }
+                }
+            }
+            log.warn("No team found with fulfillment-lead as member. Using default: {}", TEAM_NAME);
+        } catch (Exception e) {
+            log.warn("Team discovery failed: {}. Using default: {}", e.getMessage(), TEAM_NAME);
+        }
+        return TEAM_NAME;
+    }
+
+    /**
      * Pre-registers TeamTool on the agent's toolkit so HTTP requests can immediately use team
      * coordination (createTask, assignTask, sendMessage, etc.) without waiting for team_join.
      */
-    private static void setupTeamTools(HarnessAgent agent, TeamClient teamClient) {
+    private static void setupTeamTools(
+            HarnessAgent agent, TeamClient teamClient, String discoveredTeamName) {
         TeamContext ctx =
                 new TeamContext(
-                        TEAM_NAME,
+                        discoveredTeamName,
                         "default",
                         "Coordinate order-fulfillment investigation",
                         "lead",
@@ -283,7 +341,7 @@ public class FulfillmentLeadApp {
         log.info(
                 "Tools after registration: {}",
                 toolkit.getToolSchemas().stream().map(t -> t.getName()).toList());
-        log.info("Team tools pre-registered (team={}, role=lead)", TEAM_NAME);
+        log.info("Team tools pre-registered (team={}, role=lead)", discoveredTeamName);
     }
 
     // ─── HTTP helpers ───
