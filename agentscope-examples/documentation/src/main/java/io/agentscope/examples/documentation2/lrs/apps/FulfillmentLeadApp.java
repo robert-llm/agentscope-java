@@ -15,52 +15,59 @@
  */
 package io.agentscope.examples.documentation2.lrs.apps;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-import io.agentscope.core.agent.RuntimeContext;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.MsgRole;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.agentscope.examples.documentation2.lrs.OrderFulfillmentExample;
 import io.agentscope.extensions.aistio.SessionBridge;
 import io.agentscope.extensions.aistio.adapter.AgentScopeAdapter;
+import io.agentscope.extensions.aistio.store.ControlPlaneTeamClient;
 import io.agentscope.extensions.aistio.transport.ControlPlaneHttpClient;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.team.TeamClient;
 import io.agentscope.harness.agent.team.TeamContext;
+import io.agentscope.harness.agent.team.TeamContext.MemberSnapshot;
 import io.agentscope.harness.agent.tool.TeamTool;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 
 /**
- * Fulfillment Lead Agent as an HTTP service.
+ * Fulfillment Lead Agent as a Spring Boot HTTP service with multi-team support.
  *
- * <p>Exposes a REST API for external systems to interact with the order-fulfillment team. The
- * agent registers with AgentScope Service for Team coordination, and simultaneously serves HTTP
- * requests that trigger agent reasoning.
+ * <p>Discovers all teams the agent belongs to at startup, creates a TeamTool for each team, and
+ * exposes a REST API for external systems to interact with any team.
  *
  * <h3>API Endpoints</h3>
  *
  * <ul>
- *   <li>{@code POST /api/chat} — Send a message to the lead agent, get a synchronous response
+ *   <li>{@code POST /api/chat} — Send a message, optionally specifying a team
+ *   <li>{@code GET /api/teams} — List all available teams
  *   <li>{@code GET /health} — Health check
  * </ul>
  *
- * <h3>Example</h3>
+ * <h3>Examples</h3>
  *
  * <pre>
+ * # Chat with a specific team
  * curl -X POST http://localhost:18096/api/chat \
  *   -H "Content-Type: application/json" \
- *   -d '{"message": "Investigate order O-1001, customer wants delivery by 2026-09-15"}'
+ *   -d '{"message": "调查订单 O-1001", "team": "OrderFulfillmentTeam"}'
+ *
+ * # Chat without specifying team (auto-select)
+ * curl -X POST http://localhost:18096/api/chat \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"message": "调查订单 O-1001"}'
+ *
+ * # List available teams
+ * curl http://localhost:18096/api/teams
  * </pre>
  *
  * <p><b>Environment variables:</b>
@@ -70,28 +77,17 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code AISTIO_CONTROL_PLANE_HTTP} (default: http://localhost:8081) — Service URL
  *   <li>{@code BUILDER_INTERNAL_TOKEN} — Service internal token
  *   <li>{@code AISTIO_CONTRACT_PORT} (default: 18091) — Contract HTTP server port
- *   <li>{@code API_PORT} (default: 18096) — Public HTTP API port
- *   <li>{@code TEAM_NAME} (default: OrderFulfillmentTeam) — Team name for coordination
+ *   <li>{@code SERVER_PORT} (default: 18096) — HTTP API port (Spring Boot standard)
  * </ul>
  */
+@SpringBootApplication
 public class FulfillmentLeadApp {
 
     private static final Logger log = LoggerFactory.getLogger(FulfillmentLeadApp.class);
     private static final String AGENT_KEY = "fulfillment-lead";
     private static final int CONTRACT_PORT = 18091;
-    private static final int API_PORT =
-            Integer.parseInt(OrderFulfillmentExample.envOr("API_PORT", "18096"));
-    private static final String TEAM_NAME =
-            System.getenv("TEAM_NAME") != null
-                    ? System.getenv("TEAM_NAME")
-                    : "OrderFulfillmentTeam";
 
-    private static final ObjectMapper JSON = new ObjectMapper();
-
-    public static void main(String[] args) throws Exception {
-        log.info("Starting {} ...", AGENT_KEY);
-
-        // 0. Verify DashScope API key
+    public static void main(String[] args) {
         String apiKey = System.getenv("DASHSCOPE_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
             log.error("DASHSCOPE_API_KEY is not set! Set it in IDEA Run Configuration.");
@@ -99,17 +95,18 @@ public class FulfillmentLeadApp {
         }
         log.info("DASHSCOPE_API_KEY is set (length={})", apiKey.length());
 
-        // 1. Load shared business data
+        SpringApplication.run(FulfillmentLeadApp.class, args);
+    }
+
+    @Bean
+    public HarnessAgent fulfillmentLeadAgent() throws Exception {
+        log.info("Building fulfillment-lead agent...");
+
         var dataStore = OrderFulfillmentExample.loadDataStore();
         var example = new OrderFulfillmentExample(dataStore);
-
-        // 2. Create adapter (provides observation middleware)
         AgentScopeAdapter adapter = new AgentScopeAdapter();
-
-        // 3. Build the agent with middleware
         HarnessAgent agent = example.buildFulfillmentLeadAgent(adapter);
 
-        // 4. Create TeamClient for team coordination via control plane
         String controlPlaneHttp =
                 OrderFulfillmentExample.envOr("AISTIO_CONTROL_PLANE_HTTP", "http://localhost:8081");
         String internalToken =
@@ -117,254 +114,180 @@ public class FulfillmentLeadApp {
                         "BUILDER_INTERNAL_TOKEN", OrderFulfillmentExample.DEFAULT_INTERNAL_TOKEN);
         ControlPlaneHttpClient httpClient =
                 new ControlPlaneHttpClient(controlPlaneHttp, internalToken);
-        TeamClient teamClient =
-                new io.agentscope.extensions.aistio.store.ControlPlaneTeamClient(httpClient);
+        TeamClient teamClient = new ControlPlaneTeamClient(httpClient);
 
-        // 5. Register with Service (TeamClient enables team coordination)
         SessionBridge bridge =
                 OrderFulfillmentExample.registerWithService(
                         agent, adapter, AGENT_KEY, teamClient, CONTRACT_PORT);
 
-        // 6. Discover actual team name from control plane
-        String discoveredTeamName = discoverTeamName(httpClient);
-        log.info("Using team name: {}", discoveredTeamName);
-
-        // 7. Pre-register team tools for HTTP API coordination
-        setupTeamTools(agent, teamClient, discoveredTeamName);
-
-        // 8. Test model connectivity
-        log.info("Testing model connectivity (dashscope:qwen-plus)...");
-        try {
-            Msg testMsg = Msg.builder().role(MsgRole.USER).textContent("Hi").build();
-            RuntimeContext testRc = RuntimeContext.builder().sessionId("startup-test").build();
-            Msg testResp = agent.call(testMsg, testRc).block(Duration.ofSeconds(60));
-            if (testResp != null) {
-                String preview = testResp.getTextContent();
-                if (preview != null && preview.length() > 80) {
-                    preview = preview.substring(0, 80) + "...";
-                }
-                log.info("Model OK: {}", preview);
-            } else {
-                log.warn("Model returned null response");
-            }
-        } catch (Exception e) {
-            log.error("Model test FAILED: {} — agent will not work!", e.getMessage());
-        }
-
-        // 9. Start public HTTP API server
-        HttpServer apiServer = startApiServer(agent);
-
-        log.info("============================================");
-        log.info("{} is running.", AGENT_KEY);
-        log.info("  API endpoint : http://localhost:{}/api/chat", API_PORT);
-        log.info("  Health check : http://localhost:{}/health", API_PORT);
-        log.info("  Service console: http://localhost:8080");
-        log.info("============================================");
-        log.info("Press Ctrl+C to stop.");
-
-        // 10. Keep alive until shutdown
-        final HttpServer finalApiServer = apiServer;
         Runtime.getRuntime()
                 .addShutdownHook(
                         new Thread(
                                 () -> {
                                     log.info("Shutting down {} ...", AGENT_KEY);
-                                    finalApiServer.stop(0);
                                     bridge.close();
                                 }));
 
-        Thread.currentThread().join();
-    }
+        log.info("============================================");
+        log.info("{} is running.", AGENT_KEY);
+        log.info("  Service console: http://localhost:8080");
+        log.info("============================================");
 
-    /** Starts the public HTTP API server. */
-    private static HttpServer startApiServer(HarnessAgent agent) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", API_PORT), 0);
-        AtomicInteger sessionCounter = new AtomicInteger(0);
-
-        // POST /api/chat — synchronous chat endpoint
-        server.createContext(
-                "/api/chat",
-                exchange -> {
-                    if (!"POST".equals(exchange.getRequestMethod())) {
-                        sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-                        return;
-                    }
-                    try {
-                        String body = readBody(exchange);
-                        Map<String, Object> request = parseJson(body);
-                        String message = (String) request.get("message");
-                        if (message == null || message.isBlank()) {
-                            sendJson(exchange, 400, Map.of("error", "message is required"));
-                            return;
-                        }
-
-                        log.info(">>> [API Request] {}", message);
-
-                        // Build request with team coordination context
-                        String teamHint =
-                                "\n\n[Team Context] You are lead of team '"
-                                        + TEAM_NAME
-                                        + "'. Use the `team` tool to coordinate:"
-                                        + " createTask, assignTask, sendMessage,"
-                                        + " listTasks, listMembers.";
-                        Msg input =
-                                Msg.builder()
-                                        .role(MsgRole.USER)
-                                        .textContent(message + teamHint)
-                                        .build();
-                        String sessionId = "api-session-" + sessionCounter.incrementAndGet();
-                        RuntimeContext rc = RuntimeContext.builder().sessionId(sessionId).build();
-
-                        log.info("Calling agent (session={})...", sessionId);
-                        long t0 = System.currentTimeMillis();
-
-                        Msg response = agent.call(input, rc).block(Duration.ofMinutes(2));
-
-                        long elapsed = System.currentTimeMillis() - t0;
-                        String reply = response != null ? response.getTextContent() : "";
-                        log.info("<<< [API Response] ({}ms) {}", elapsed, reply);
-
-                        sendJson(exchange, 200, Map.of("reply", reply, "sessionId", sessionId));
-                    } catch (Exception e) {
-                        Throwable cause = e.getCause();
-                        if (cause instanceof java.util.concurrent.TimeoutException
-                                || e.getMessage() != null && e.getMessage().contains("Timeout")) {
-                            log.error("API chat timed out (2 min)");
-                            sendJson(exchange, 504, Map.of("error", "Agent timed out (2 min)"));
-                            return;
-                        }
-                        log.error("API chat failed", e);
-                        sendJson(exchange, 500, Map.of("error", e.getMessage()));
-                    }
-                });
-
-        // GET /health — health check
-        server.createContext(
-                "/health",
-                exchange -> {
-                    if (!"GET".equals(exchange.getRequestMethod())) {
-                        sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-                        return;
-                    }
-                    sendJson(exchange, 200, Map.of("status", "ok", "agent", AGENT_KEY));
-                });
-
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
-        server.start();
-        log.info("HTTP API server started on port {}", API_PORT);
-        return server;
+        return agent;
     }
 
     /**
-     * Discovers the team name from the control plane by finding which team contains this agent as a
-     * member. Falls back to TEAM_NAME env var or "OrderFulfillmentTeam" if discovery fails.
+     * Discovers all teams from the control plane and creates a TeamTool for each team the agent
+     * belongs to. Returns a map of teamName -> TeamTool.
      */
-    private static String discoverTeamName(ControlPlaneHttpClient httpClient) {
+    @Bean
+    public Map<String, TeamTool> teamTools() throws Exception {
+        return discoverAndCreateTeamTools();
+    }
+
+    /**
+     * Discovers all teams and creates TeamTools. Can be called at startup or during runtime refresh.
+     */
+    public Map<String, TeamTool> discoverAndCreateTeamTools() throws Exception {
+        String controlPlaneHttp =
+                OrderFulfillmentExample.envOr("AISTIO_CONTROL_PLANE_HTTP", "http://localhost:8081");
+        String internalToken =
+                OrderFulfillmentExample.envOr(
+                        "BUILDER_INTERNAL_TOKEN", OrderFulfillmentExample.DEFAULT_INTERNAL_TOKEN);
+        ControlPlaneHttpClient httpClient =
+                new ControlPlaneHttpClient(controlPlaneHttp, internalToken);
+        TeamClient teamClient = new ControlPlaneTeamClient(httpClient);
+
         String namespace = "default";
+        Map<String, TeamTool> tools = new LinkedHashMap<>();
+
         try {
             ControlPlaneHttpClient.Response resp =
                     httpClient.send("GET", "/api/v1/teams?namespace=" + namespace, null);
             if (resp.status() != 200) {
                 log.warn("Failed to list teams: HTTP {} {}", resp.status(), resp.body());
-                return TEAM_NAME;
+                return tools;
             }
-            var root = ControlPlaneHttpClient.mapper().readTree(resp.body());
-            var items = root.path("items");
+
+            JsonNode root = ControlPlaneHttpClient.mapper().readTree(resp.body());
+            JsonNode items = root.path("items");
             log.info("Found {} team(s) on control plane", items.size());
-            for (var item : items) {
+
+            for (JsonNode item : items) {
                 String teamName = item.path("name").asText();
                 String phase = item.path("phase").asText();
                 int memberCount = item.path("memberCount").asInt();
-                log.info("  Team: {} (phase={}, members={})", teamName, phase, memberCount);
-                // Check if fulfillment-lead is a member of this team
+                log.info(
+                        "  Checking team: {} (phase={}, members={})", teamName, phase, memberCount);
+
                 ControlPlaneHttpClient.Response membersResp =
                         httpClient.send(
                                 "GET",
                                 "/api/v1/teams/"
-                                        + java.net.URLEncoder.encode(teamName, "UTF-8")
+                                        + URLEncoder.encode(teamName, StandardCharsets.UTF_8)
                                         + "/members?namespace="
                                         + namespace,
                                 null);
+
                 if (membersResp.status() == 200) {
-                    var membersRoot = ControlPlaneHttpClient.mapper().readTree(membersResp.body());
-                    for (var member : membersRoot.path("members")) {
+                    JsonNode membersRoot =
+                            ControlPlaneHttpClient.mapper().readTree(membersResp.body());
+                    boolean isMember = false;
+                    boolean isLead = false;
+                    List<String> memberNames = new ArrayList<>();
+
+                    for (JsonNode member : membersRoot.path("members")) {
                         String agentRef = member.path("agentRef").asText();
                         String memberName = member.path("name").asText();
-                        if ("fulfillment-lead".equals(agentRef)) {
-                            log.info(
-                                    "Discovered team: {} (member={}, agentRef={})",
-                                    teamName,
-                                    memberName,
-                                    agentRef);
-                            return teamName;
+                        memberNames.add(memberName);
+                        if (AGENT_KEY.equals(agentRef)) {
+                            isMember = true;
+                            if (AGENT_KEY.equals(item.path("leadRef").asText())) {
+                                isLead = true;
+                            }
                         }
+                    }
+
+                    if (isMember) {
+                        List<MemberSnapshot> memberSnapshots = new ArrayList<>();
+                        for (JsonNode member : membersRoot.path("members")) {
+                            memberSnapshots.add(
+                                    new MemberSnapshot(
+                                            member.path("name").asText(),
+                                            member.path("agentRef").asText(),
+                                            member.path("phase").asText("Working")));
+                        }
+
+                        TeamContext ctx =
+                                new TeamContext(
+                                        teamName,
+                                        namespace,
+                                        item.path("objective").asText(""),
+                                        isLead ? "lead" : "worker",
+                                        isLead,
+                                        memberSnapshots,
+                                        List.of());
+
+                        TeamTool teamTool = new TeamTool(teamClient, ctx);
+                        tools.put(teamName, teamTool);
+                        log.info(
+                                "  ✓ Registered TeamTool for: {} (role={}, members={})",
+                                teamName,
+                                isLead ? "lead" : "worker",
+                                memberNames);
+                    } else {
+                        log.info("  ✗ Agent is not a member of: {}", teamName);
                     }
                 }
             }
-            log.warn("No team found with fulfillment-lead as member. Using default: {}", TEAM_NAME);
         } catch (Exception e) {
-            log.warn("Team discovery failed: {}. Using default: {}", e.getMessage(), TEAM_NAME);
-        }
-        return TEAM_NAME;
-    }
-
-    /**
-     * Pre-registers TeamTool on the agent's toolkit so HTTP requests can immediately use team
-     * coordination (createTask, assignTask, sendMessage, etc.) without waiting for team_join.
-     */
-    private static void setupTeamTools(
-            HarnessAgent agent, TeamClient teamClient, String discoveredTeamName) {
-        TeamContext ctx =
-                new TeamContext(
-                        discoveredTeamName,
-                        "default",
-                        "Coordinate order-fulfillment investigation",
-                        "lead",
-                        true,
-                        List.of(),
-                        List.of());
-        TeamTool teamTool = new TeamTool(teamClient, ctx);
-        var toolkit = agent.getToolkit();
-        if (toolkit == null) {
-            log.error("Agent toolkit is null! Team tools cannot be registered.");
-            return;
+            log.warn("Team discovery failed: {}", e.getMessage());
         }
 
-        // Log tools before registration
-        log.info(
-                "Tools before registration: {}",
-                toolkit.getToolSchemas().stream().map(t -> t.getName()).toList());
-
-        toolkit.registerTool(teamTool);
-
-        // Log tools after registration
-        log.info(
-                "Tools after registration: {}",
-                toolkit.getToolSchemas().stream().map(t -> t.getName()).toList());
-        log.info("Team tools pre-registered (team={}, role=lead)", discoveredTeamName);
+        log.info("Total TeamTools registered: {}", tools.size());
+        return tools;
     }
 
-    // ─── HTTP helpers ───
+    /** Stores the team tools map for the controller to access. */
+    @Bean
+    public TeamToolsRegistry teamToolsRegistry(Map<String, TeamTool> teamTools) {
+        return new TeamToolsRegistry(teamTools);
+    }
 
-    private static String readBody(HttpExchange exchange) throws IOException {
-        try (InputStream is = exchange.getRequestBody()) {
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    @Bean
+    public CommandLineRunner startupLogger() {
+        return args -> {
+            String port = OrderFulfillmentExample.envOr("SERVER_PORT", "18096");
+            log.info("HTTP API server started on port {}", port);
+            log.info("  API endpoint : http://localhost:{}/api/chat", port);
+            log.info("  Teams endpoint: http://localhost:{}/api/teams", port);
+            log.info("  Health check : http://localhost:{}/health", port);
+        };
+    }
+
+    /** Simple registry to hold the team tools map with refresh capability. */
+    public static class TeamToolsRegistry {
+        private volatile Map<String, TeamTool> teamTools;
+
+        public TeamToolsRegistry(Map<String, TeamTool> teamTools) {
+            this.teamTools = teamTools;
         }
-    }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> parseJson(String body) throws IOException {
-        return JSON.readValue(body, Map.class);
-    }
+        public Map<String, TeamTool> getTeamTools() {
+            return teamTools;
+        }
 
-    private static void sendJson(HttpExchange exchange, int statusCode, Map<String, Object> data)
-            throws IOException {
-        String json = JSON.writeValueAsString(data);
-        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json");
-        exchange.sendResponseHeaders(statusCode, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
+        public TeamTool getTeamTool(String teamName) {
+            return teamTools.get(teamName);
+        }
+
+        public List<String> getTeamNames() {
+            return new ArrayList<>(teamTools.keySet());
+        }
+
+        /** Update the team tools map (called during refresh). */
+        public void updateTeamTools(Map<String, TeamTool> newTools) {
+            this.teamTools = newTools;
         }
     }
 }

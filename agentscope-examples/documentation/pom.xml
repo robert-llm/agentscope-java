@@ -170,6 +170,12 @@
             <artifactId>pgvector</artifactId>
         </dependency>
 
+        <!-- Spring Boot Web (for REST controller examples) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
         <!-- Spring Boot WebFlux (for SSE streaming examples) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
