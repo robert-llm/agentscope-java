@@ -18,12 +18,21 @@ package io.agentscope.examples.documentation2.lrs.tools;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.agentscope.core.event.AgentEndEvent;
+import io.agentscope.core.event.AgentEventEmitter;
+import io.agentscope.core.event.AgentStartEvent;
+import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.extensions.aistio.transport.ControlPlaneHttpClient;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Routing tools for the Router Agent.
@@ -41,10 +50,19 @@ public final class RoutingTools {
 
     private final ControlPlaneHttpClient httpClient;
     private final String namespace;
+    private final TeamResultProcessor resultProcessor;
 
     public RoutingTools(ControlPlaneHttpClient httpClient, String namespace) {
+        this(httpClient, namespace, null);
+    }
+
+    public RoutingTools(
+            ControlPlaneHttpClient httpClient,
+            String namespace,
+            TeamResultProcessor resultProcessor) {
         this.httpClient = httpClient;
         this.namespace = namespace;
+        this.resultProcessor = resultProcessor;
     }
 
     @Tool(
@@ -95,67 +113,55 @@ public final class RoutingTools {
             name = "route_task",
             description =
                     """
-                    Route a task to a specific team by creating a task on the control plane.
-                    The team's lead agent will pick up and coordinate the task among its members.
-                    Use this after identifying which team is best suited for the request.\
+                    Route a task to a specific team and wait for the result. \
+                    The team's lead agent picks up and coordinates the task among its members. \
+                    This tool blocks until the task completes (max 5 minutes) and returns \
+                    the processed result.
+
+                    stream_mode controls event visibility:
+                    - 'transparent' (default): forward team discussion to the user in real-time.
+                    - 'summary': suppress team events; only the final result is returned.\
                     """)
-    public String routeTask(
+    public Mono<String> routeTask(
             @ToolParam(name = "teamName", description = "The target team name") String teamName,
             @ToolParam(name = "subject", description = "Short subject/title of the task")
                     String subject,
             @ToolParam(name = "description", description = "Detailed task description")
-                    String description) {
+                    String description,
+            @ToolParam(
+                            name = "stream_mode",
+                            required = false,
+                            description =
+                                    "transparent (default) = forward team events to user;"
+                                            + " summary = suppress events, return result only")
+                    String streamMode) {
         if (teamName == null || teamName.isBlank()) {
-            return "error: teamName must not be blank";
+            return Mono.just("error: teamName must not be blank");
         }
         if (subject == null || subject.isBlank()) {
-            return "error: subject must not be blank";
+            return Mono.just("error: subject must not be blank");
         }
 
-        try {
-            Map<String, Object> taskBody =
-                    Map.of(
-                            "subject", subject,
-                            "description", description != null ? description : "",
-                            "namespace", namespace);
+        boolean forwardEvents =
+                streamMode == null
+                        || streamMode.isBlank()
+                        || "transparent".equalsIgnoreCase(streamMode);
 
-            String path =
-                    "/api/v1/teams/"
-                            + java.net.URLEncoder.encode(
-                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
-                            + "/tasks?namespace="
-                            + namespace;
+        return Mono.deferContextual(
+                ctx -> {
+                    Optional<AgentEventEmitter> emitterOpt =
+                            forwardEvents ? AgentEventEmitter.fromContext(ctx) : Optional.empty();
 
-            ControlPlaneHttpClient.Response resp = httpClient.send("POST", path, taskBody);
-
-            ObjectNode result = MAPPER.createObjectNode();
-            if (resp.status() == 200 || resp.status() == 201) {
-                result.put("status", "created");
-                result.put("team", teamName);
-                result.put("subject", subject);
-                // Parse taskId from the response
-                try {
-                    JsonNode respBody = MAPPER.readTree(resp.body());
-                    String taskId = respBody.path("taskId").asText("");
-                    if (!taskId.isEmpty()) {
-                        result.put("taskId", taskId);
-                    }
-                } catch (Exception parseEx) {
-                    log.debug("Could not parse taskId from response: {}", parseEx.getMessage());
-                }
-                log.info("Task routed to team '{}': {}", teamName, subject);
-            } else {
-                result.put("status", "failed");
-                result.put("team", teamName);
-                result.put("httpStatus", resp.status());
-                result.put("detail", resp.body());
-                log.warn("Failed to route task to team '{}': HTTP {}", teamName, resp.status());
-            }
-            return result.toString();
-        } catch (Exception e) {
-            log.error("route_task failed", e);
-            return "error: " + e.getMessage();
-        }
+                    return Mono.fromCallable(
+                                    () ->
+                                            doRouteTask(
+                                                    teamName,
+                                                    subject,
+                                                    description,
+                                                    emitterOpt.orElse(null),
+                                                    forwardEvents))
+                            .subscribeOn(Schedulers.boundedElastic());
+                });
     }
 
     @Tool(
@@ -335,5 +341,225 @@ public final class RoutingTools {
             log.error("list_team_members failed", e);
             return "error: " + e.getMessage();
         }
+    }
+
+    // ---- route_task helpers ----------------------------------------------------
+
+    private static final long POLL_INTERVAL_MS = 2_000L;
+    private static final long MAX_WAIT_MS = 5 * 60 * 1_000L;
+
+    private String doRouteTask(
+            String teamName,
+            String subject,
+            String description,
+            AgentEventEmitter emitter,
+            boolean forwardEvents) {
+        try {
+            // 1. Submit task to control plane
+            Map<String, Object> taskBody =
+                    Map.of(
+                            "subject", subject,
+                            "description", description != null ? description : "",
+                            "namespace", namespace);
+
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/tasks?namespace="
+                            + namespace;
+
+            ControlPlaneHttpClient.Response resp = httpClient.send("POST", path, taskBody);
+            if (resp.status() != 200 && resp.status() != 201) {
+                return "error: failed to create task, HTTP " + resp.status();
+            }
+
+            JsonNode respBody = MAPPER.readTree(resp.body());
+            String taskId = respBody.path("taskId").asText("");
+            if (taskId.isEmpty()) {
+                return "error: no taskId in response body: " + resp.body();
+            }
+            log.info("Task routed to team '{}': taskId={}, subject={}", teamName, taskId, subject);
+
+            // 2. Setup event forwarding for transparent mode
+            String replyId = UUID.randomUUID().toString().replace("-", "");
+            String sourcePath = "router/" + teamName;
+            AtomicLong lastMsgId = new AtomicLong(0);
+
+            if (emitter != null) {
+                emitter.emit(new AgentStartEvent(taskId, replyId, teamName).withSource(sourcePath));
+            }
+
+            // 3. Poll for completion (with event forwarding in transparent mode)
+            long deadline = System.currentTimeMillis() + MAX_WAIT_MS;
+            boolean completed = false;
+            while (System.currentTimeMillis() < deadline) {
+                String state = checkTaskState(teamName, taskId);
+                if (isTerminalState(state)) {
+                    completed = true;
+                    break;
+                }
+
+                // Forward new team messages in transparent mode
+                if (emitter != null) {
+                    forwardNewMessages(teamName, lastMsgId, emitter, replyId, sourcePath);
+                }
+
+                Thread.sleep(POLL_INTERVAL_MS);
+            }
+
+            // 4. Final flush of messages + AgentEnd event
+            if (emitter != null) {
+                forwardNewMessages(teamName, lastMsgId, emitter, replyId, sourcePath);
+                emitter.emit(new AgentEndEvent(replyId).withSource(sourcePath));
+            }
+
+            // 5. Fetch final result
+            String rawResult = fetchTaskResult(teamName, taskId);
+
+            // 6. Handle timeout: prepend warning when the task did not reach a terminal state
+            if (!completed) {
+                log.warn(
+                        "route_task timed out after {}ms: team='{}', taskId={}",
+                        MAX_WAIT_MS,
+                        teamName,
+                        taskId);
+                rawResult =
+                        "[超时] 等待团队 '"
+                                + teamName
+                                + "' 处理超过 "
+                                + (MAX_WAIT_MS / 1000 / 60)
+                                + " 分钟，任务可能仍在进行中。"
+                                + "当前状态: "
+                                + rawResult;
+            }
+
+            // 7. Apply result processor (always applied in both modes)
+            String processed =
+                    resultProcessor != null
+                            ? resultProcessor.process(teamName, subject, rawResult)
+                            : rawResult;
+
+            return formatResult(teamName, taskId, processed);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "error: interrupted while waiting for task result";
+        } catch (Exception e) {
+            log.error("route_task failed", e);
+            return "error: " + e.getMessage();
+        }
+    }
+
+    private String checkTaskState(String teamName, String taskId) {
+        try {
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/tasks?namespace="
+                            + namespace;
+            ControlPlaneHttpClient.Response resp = httpClient.send("GET", path, null);
+            if (resp.status() != 200) {
+                return "unknown";
+            }
+            JsonNode root = MAPPER.readTree(resp.body());
+            JsonNode tasks = root.path("tasks");
+            for (int i = 0; i < tasks.size(); i++) {
+                JsonNode task = tasks.get(i);
+                if (taskId.equals(task.path("taskId").asText(""))) {
+                    return task.path("state").asText("");
+                }
+            }
+            return "unknown";
+        } catch (Exception e) {
+            log.warn("checkTaskState failed: {}", e.getMessage());
+            return "unknown";
+        }
+    }
+
+    private boolean isTerminalState(String state) {
+        return "completed".equalsIgnoreCase(state)
+                || "failed".equalsIgnoreCase(state)
+                || "cancelled".equalsIgnoreCase(state);
+    }
+
+    private void forwardNewMessages(
+            String teamName,
+            AtomicLong lastMsgId,
+            AgentEventEmitter emitter,
+            String replyId,
+            String sourcePath) {
+        try {
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/events?namespace="
+                            + namespace
+                            + "&after="
+                            + lastMsgId.get();
+            ControlPlaneHttpClient.Response resp = httpClient.send("GET", path, null);
+            if (resp.status() != 200) {
+                return;
+            }
+            JsonNode root = MAPPER.readTree(resp.body());
+            JsonNode events = root.path("events");
+            for (int i = 0; i < events.size(); i++) {
+                JsonNode event = events.get(i);
+                long msgId = event.path("id").asLong(0);
+                if (msgId > lastMsgId.get()) {
+                    lastMsgId.set(msgId);
+                }
+                String from = event.path("from").asText("");
+                String body = event.path("body").asText("");
+                if (!body.isEmpty()) {
+                    String text = "[" + from + "] " + body + "\n";
+                    emitter.emit(
+                            new TextBlockDeltaEvent(replyId, "team-msg", text)
+                                    .withSource(sourcePath));
+                }
+            }
+        } catch (Exception e) {
+            log.debug("forwardNewMessages failed: {}", e.getMessage());
+        }
+    }
+
+    private String fetchTaskResult(String teamName, String taskId) {
+        try {
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/tasks?namespace="
+                            + namespace;
+            ControlPlaneHttpClient.Response resp = httpClient.send("GET", path, null);
+            if (resp.status() != 200) {
+                return "error: could not fetch result (HTTP " + resp.status() + ")";
+            }
+            JsonNode root = MAPPER.readTree(resp.body());
+            JsonNode tasks = root.path("tasks");
+            for (int i = 0; i < tasks.size(); i++) {
+                JsonNode task = tasks.get(i);
+                if (taskId.equals(task.path("taskId").asText(""))) {
+                    String state = task.path("state").asText("");
+                    String result = task.path("result").asText("");
+                    if (result.isEmpty()) {
+                        return "task state: " + state + ", no result text available";
+                    }
+                    return result;
+                }
+            }
+            return "error: task not found after completion";
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
+
+    private String formatResult(String teamName, String taskId, String result) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("team: ").append(teamName).append("\n");
+        sb.append("task_id: ").append(taskId).append("\n");
+        sb.append("result:\n").append(result);
+        return sb.toString();
     }
 }

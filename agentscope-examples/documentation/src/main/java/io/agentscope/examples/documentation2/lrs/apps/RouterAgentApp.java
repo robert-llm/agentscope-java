@@ -17,6 +17,7 @@ package io.agentscope.examples.documentation2.lrs.apps;
 
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.documentation2.lrs.tools.RoutingTools;
+import io.agentscope.examples.documentation2.lrs.tools.TeamResultProcessor;
 import io.agentscope.extensions.aistio.Aistio;
 import io.agentscope.extensions.aistio.AistioConfig;
 import io.agentscope.extensions.aistio.SessionBridge;
@@ -109,7 +110,21 @@ public class RouterAgentApp {
         ControlPlaneHttpClient httpClient =
                 new ControlPlaneHttpClient(controlPlaneHttp, internalToken);
         String namespace = "default";
-        toolkit.registerTool(new RoutingTools(httpClient, namespace));
+        // Custom result processor: formats team output for the Router LLM
+        TeamResultProcessor resultProcessor =
+                (teamName, subject, rawResult) ->
+                        String.format(
+                                """
+                                团队: %s
+                                任务: %s
+                                调查结果:
+                                %s
+
+                                请基于以上调查结果，为用户生成简洁清晰的中文汇总。\
+                                """,
+                                teamName, subject, rawResult);
+
+        toolkit.registerTool(new RoutingTools(httpClient, namespace, resultProcessor));
 
         AgentScopeAdapter adapter = new AgentScopeAdapter();
 
@@ -194,42 +209,40 @@ public class RouterAgentApp {
 
         You receive user requests and route them to the appropriate team.
         You do NOT execute business tasks yourself — you delegate to teams.
-        After routing, you MUST poll for the task result and return it to the user.
+        The `route_task` tool waits for the team to finish and returns the result.
 
         ## Routing Workflow
 
         1. Use `list_teams` to discover available teams and their objectives.
         2. Use `list_team_members` to understand a team's capabilities.
         3. Use `route_task` to create a task in the appropriate team.
-           This returns a `taskId` — remember it.
-        4. Use `get_task_status` with the teamName and taskId to poll for the result.
-           Call it immediately after routing, then again every few seconds.
-        5. When the task state becomes "completed" or "failed", retrieve the result.
-        6. Use `get_team_messages` to see the team's discussion and processing details.
-        7. Combine the task result and team messages into a comprehensive response.
+           This tool blocks until the task completes (max 5 minutes) and returns
+           the processed result directly — no polling needed.
 
-        ## Polling Strategy
+        ## stream_mode Parameter
 
-        - After calling `route_task`, immediately call `get_task_status`.
-        - If the state is "pending" or "in_progress", call `get_task_status` again.
-        - Repeat polling up to 5 times until the state is terminal (completed/failed).
-        - Once terminal, call `get_team_messages` to get the full discussion context.
-        - Always return the actual result from the team, not just "task was routed".
+        The `route_task` tool accepts an optional `stream_mode` parameter:
+        - `transparent` (default): Team discussion is forwarded to the user in real-time.
+          The user sees the team's reasoning, tool calls, and messages as they happen.
+        - `summary`: Team events are suppressed. The user only sees your final summary.
+
+        Choose `transparent` when the user benefits from seeing the team's process.
+        Choose `summary` when only the conclusion matters.
 
         ## Response Format
 
         Your final response to the user should include:
         1. Which team handled the task
-        2. The task result (from get_task_status)
-        3. Key findings from team messages (from get_team_messages)
-        4. A clear summary in Chinese
+        2. A clear summary of the team's findings in Chinese
+        3. Actionable next steps if applicable
 
         ## Rules
 
         - Do NOT use filesystem tools, shell, or memory tools — they are disabled.
         - Do NOT try to execute tasks yourself — always route to teams.
         - If you cannot determine which team to route to, ask the user for clarification.
-        - NEVER just say "task has been routed" — always poll and return the actual result.
+        - The `route_task` result already includes the team's output — summarize it for the user.
+        - Use `get_team_messages` only if you need additional context not in the result.
         """;
     }
 
