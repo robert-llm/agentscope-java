@@ -133,6 +133,16 @@ public final class RoutingTools {
                 result.put("status", "created");
                 result.put("team", teamName);
                 result.put("subject", subject);
+                // Parse taskId from the response
+                try {
+                    JsonNode respBody = MAPPER.readTree(resp.body());
+                    String taskId = respBody.path("taskId").asText("");
+                    if (!taskId.isEmpty()) {
+                        result.put("taskId", taskId);
+                    }
+                } catch (Exception parseEx) {
+                    log.debug("Could not parse taskId from response: {}", parseEx.getMessage());
+                }
                 log.info("Task routed to team '{}': {}", teamName, subject);
             } else {
                 result.put("status", "failed");
@@ -144,6 +154,132 @@ public final class RoutingTools {
             return result.toString();
         } catch (Exception e) {
             log.error("route_task failed", e);
+            return "error: " + e.getMessage();
+        }
+    }
+
+    @Tool(
+            name = "get_task_status",
+            readOnly = true,
+            description =
+                    """
+                    Get the status and result of a specific task on a team.
+                    Returns the task state (pending, in_progress, completed, failed) and
+                    the result text if completed. Use this after route_task to poll for
+                    the team's processing result.
+                    """)
+    public String getTaskStatus(
+            @ToolParam(name = "teamName", description = "The team name") String teamName,
+            @ToolParam(name = "taskId", description = "The task ID returned by route_task")
+                    String taskId) {
+        if (teamName == null || teamName.isBlank()) {
+            return "error: teamName must not be blank";
+        }
+        if (taskId == null || taskId.isBlank()) {
+            return "error: taskId must not be blank";
+        }
+
+        try {
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/tasks?namespace="
+                            + namespace;
+
+            ControlPlaneHttpClient.Response resp = httpClient.send("GET", path, null);
+            if (resp.status() != 200) {
+                return "error: failed to list tasks for team '"
+                        + teamName
+                        + "', HTTP "
+                        + resp.status();
+            }
+
+            JsonNode root = MAPPER.readTree(resp.body());
+            JsonNode tasks = root.path("tasks");
+
+            // Find the specific task by taskId
+            for (int i = 0; i < tasks.size(); i++) {
+                JsonNode task = tasks.get(i);
+                if (taskId.equals(task.path("taskId").asText(""))) {
+                    ObjectNode result = MAPPER.createObjectNode();
+                    result.put("taskId", task.path("taskId").asText());
+                    result.put("team", teamName);
+                    result.put("subject", task.path("subject").asText(""));
+                    result.put("state", task.path("state").asText(""));
+                    result.put("owner", task.path("owner").asText(""));
+                    String taskResult = task.path("result").asText("");
+                    if (!taskResult.isEmpty()) {
+                        result.put("result", taskResult);
+                    }
+                    return result.toString();
+                }
+            }
+
+            return "error: task '" + taskId + "' not found in team '" + teamName + "'";
+        } catch (Exception e) {
+            log.error("get_task_status failed", e);
+            return "error: " + e.getMessage();
+        }
+    }
+
+    @Tool(
+            name = "get_team_messages",
+            readOnly = true,
+            description =
+                    """
+                    Get recent messages exchanged within a team.
+                    Returns messages between team members including task assignments,
+                    progress reports, and results. Use this to see what the team discussed
+                    and concluded about a routed task.
+                    """)
+    public String getTeamMessages(
+            @ToolParam(name = "teamName", description = "The team name") String teamName) {
+        if (teamName == null || teamName.isBlank()) {
+            return "error: teamName must not be blank";
+        }
+
+        try {
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/messages?namespace="
+                            + namespace;
+
+            ControlPlaneHttpClient.Response resp = httpClient.send("GET", path, null);
+            if (resp.status() != 200) {
+                return "error: failed to list messages for team '"
+                        + teamName
+                        + "', HTTP "
+                        + resp.status();
+            }
+
+            JsonNode root = MAPPER.readTree(resp.body());
+            JsonNode messages = root.path("messages");
+            if (messages.isMissingNode()) {
+                messages = root.path("items");
+            }
+
+            ObjectNode result = MAPPER.createObjectNode();
+            result.put("team", teamName);
+            result.put("count", messages.size());
+
+            // Return last 20 messages to avoid overwhelming output
+            int start = Math.max(0, messages.size() - 20);
+            for (int i = start; i < messages.size(); i++) {
+                JsonNode msg = messages.get(i);
+                ObjectNode simplified = MAPPER.createObjectNode();
+                simplified.put("from", msg.path("from").asText(""));
+                simplified.put("to", msg.path("to").asText(""));
+                simplified.put("body", msg.path("body").asText(""));
+                simplified.put("timestamp", msg.path("createdAt").asText(""));
+                result.set("message_" + (i - start), simplified);
+            }
+
+            return result.toString();
+        } catch (Exception e) {
+            log.error("get_team_messages failed", e);
             return "error: " + e.getMessage();
         }
     }

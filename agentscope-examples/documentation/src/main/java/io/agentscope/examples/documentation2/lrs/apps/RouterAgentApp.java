@@ -124,7 +124,7 @@ public class RouterAgentApp {
                         .toolkit(toolkit)
                         .workspace(agentWorkspace(AGENT_KEY))
                         .middleware(adapter.middleware())
-                        .maxIters(20)
+                        .maxIters(30)
                         .disableFilesystemTools()
                         .disableShellTool()
                         .disableSubagents()
@@ -175,6 +175,7 @@ public class RouterAgentApp {
             String port = envOr("SERVER_PORT", "18096");
             log.info("HTTP API server started on port {}", port);
             log.info("  API endpoint : http://localhost:{}/api/chat", port);
+            log.info("  SSE stream  : http://localhost:{}/api/chat/stream", port);
             log.info("  Health check : http://localhost:{}/health", port);
         };
     }
@@ -193,20 +194,42 @@ public class RouterAgentApp {
 
         You receive user requests and route them to the appropriate team.
         You do NOT execute business tasks yourself — you delegate to teams.
+        After routing, you MUST poll for the task result and return it to the user.
 
         ## Routing Workflow
 
         1. Use `list_teams` to discover available teams and their objectives.
         2. Use `list_team_members` to understand a team's capabilities.
         3. Use `route_task` to create a task in the appropriate team.
-        4. Summarize what was routed and return to the user.
+           This returns a `taskId` — remember it.
+        4. Use `get_task_status` with the teamName and taskId to poll for the result.
+           Call it immediately after routing, then again every few seconds.
+        5. When the task state becomes "completed" or "failed", retrieve the result.
+        6. Use `get_team_messages` to see the team's discussion and processing details.
+        7. Combine the task result and team messages into a comprehensive response.
+
+        ## Polling Strategy
+
+        - After calling `route_task`, immediately call `get_task_status`.
+        - If the state is "pending" or "in_progress", call `get_task_status` again.
+        - Repeat polling up to 5 times until the state is terminal (completed/failed).
+        - Once terminal, call `get_team_messages` to get the full discussion context.
+        - Always return the actual result from the team, not just "task was routed".
+
+        ## Response Format
+
+        Your final response to the user should include:
+        1. Which team handled the task
+        2. The task result (from get_task_status)
+        3. Key findings from team messages (from get_team_messages)
+        4. A clear summary in Chinese
 
         ## Rules
 
         - Do NOT use filesystem tools, shell, or memory tools — they are disabled.
         - Do NOT try to execute tasks yourself — always route to teams.
         - If you cannot determine which team to route to, ask the user for clarification.
-        - Always provide a clear summary of what was routed and to which team.
+        - NEVER just say "task has been routed" — always poll and return the actual result.
         """;
     }
 
