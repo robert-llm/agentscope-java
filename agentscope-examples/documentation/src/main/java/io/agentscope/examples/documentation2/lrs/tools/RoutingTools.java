@@ -348,6 +348,17 @@ public final class RoutingTools {
     private static final long POLL_INTERVAL_MS = 2_000L;
     private static final long MAX_WAIT_MS = 5 * 60 * 1_000L;
 
+    /**
+     * Maximum number of times to re-send the lead notification while the task is still unclaimed.
+     *
+     * <p>The WakeupDispatcher drops wakeups for running sessions. If the lead is busy processing
+     * another task when we send the first notification, the wakeup is lost. Retrying after the
+     * lead finishes ensures the new task is eventually discovered.
+     */
+    private static final int MAX_RETRY_NOTIFY = 10;
+
+    private static final long RETRY_BASE_SLEEP_MS = 1_000L;
+
     private String doRouteTask(
             String teamName,
             String subject,
@@ -355,12 +366,20 @@ public final class RoutingTools {
             AgentEventEmitter emitter,
             boolean forwardEvents) {
         try {
-            // 1. Submit task to control plane
+            // 1. Submit task to control plane WITHOUT owner.
+            //    The task appears in the "Unassigned" column. We then send a
+            //    separate team message to the lead (from this router-agent,
+            //    which is NOT a team member) to wake it up. This bypasses the
+            //    control-plane self-notification guard (to == from) that would
+            //    otherwise drop the notification when owner=lead.
             Map<String, Object> taskBody =
                     Map.of(
-                            "subject", subject,
-                            "description", description != null ? description : "",
-                            "namespace", namespace);
+                            "subject",
+                            subject,
+                            "description",
+                            description != null ? description : "",
+                            "namespace",
+                            namespace);
 
             String path =
                     "/api/v1/teams/"
@@ -381,6 +400,15 @@ public final class RoutingTools {
             }
             log.info("Task routed to team '{}': taskId={}, subject={}", teamName, taskId, subject);
 
+            // 1b. Wake the team lead by sending a message from this router-agent
+            //     (a non-member sender bypasses the self-notification guard).
+            //     The lead will discover the new task via listClaimableTasks and
+            //     claim it on its next turn. DO NOT auto-claim here: setting the
+            //     task to in_progress without waking the lead causes the polling
+            //     loop to wait forever (the lead never starts working).
+            notifyTeamLead(teamName, taskId, subject, description);
+            int retryCount = 0;
+
             // 2. Setup event forwarding for transparent mode
             String replyId = UUID.randomUUID().toString().replace("-", "");
             String sourcePath = "router/" + teamName;
@@ -398,6 +426,24 @@ public final class RoutingTools {
                 if (isTerminalState(state)) {
                     completed = true;
                     break;
+                }
+
+                // If the task is still pending and we haven't exhausted retries,
+                // sleep with backoff then re-send the notification. This handles
+                // the case where the lead was busy (session running) when the
+                // first notification arrived and the WakeupDispatcher dropped
+                // the wakeup.
+                if ("pending".equalsIgnoreCase(state) && retryCount < MAX_RETRY_NOTIFY) {
+                    long sleepMs = computeRetryBackoffMs(retryCount);
+                    log.info(
+                            "Task {} still pending, retry {}/{} (sleep {}ms), re-notifying lead",
+                            taskId,
+                            retryCount + 1,
+                            MAX_RETRY_NOTIFY,
+                            sleepMs);
+                    Thread.sleep(sleepMs);
+                    notifyTeamLead(teamName, taskId, subject, description);
+                    retryCount++;
                 }
 
                 // Forward new team messages in transparent mode
@@ -553,6 +599,64 @@ public final class RoutingTools {
         } catch (Exception e) {
             return "error: " + e.getMessage();
         }
+    }
+
+    /**
+     * Sends a team message from this router-agent to the team lead, waking it up so it can see
+     * the newly created (unassigned) task on the board and claim it.
+     *
+     * <p>The router-agent is NOT a team member, so from="router-agent" and to="lead" are
+     * different — this bypasses the control-plane self-notification guard (to == from).
+     */
+    private void notifyTeamLead(
+            String teamName, String taskId, String subject, String description) {
+        try {
+            String messageBody =
+                    "[router-agent] A new task has been routed to your team.\n"
+                            + "Task ID: "
+                            + taskId
+                            + "\nSubject: "
+                            + subject
+                            + "\nDescription: "
+                            + (description != null ? description : "N/A")
+                            + "\n\nIMPORTANT: You MUST call listClaimableTasks to see this task,"
+                            + " then call claimTask with task_id="
+                            + taskId
+                            + " to start working on it. Do NOT skip these steps.";
+
+            Map<String, Object> msgBody =
+                    Map.of("from", "router-agent", "to", "lead", "content", messageBody);
+
+            String path =
+                    "/api/v1/teams/"
+                            + java.net.URLEncoder.encode(
+                                    teamName, java.nio.charset.StandardCharsets.UTF_8)
+                            + "/messages?namespace="
+                            + namespace;
+
+            ControlPlaneHttpClient.Response resp = httpClient.send("POST", path, msgBody);
+            if (resp.status() != 200 && resp.status() != 201) {
+                log.warn(
+                        "Failed to notify team lead: HTTP {}, body={}", resp.status(), resp.body());
+            } else {
+                log.info("Notified team lead about task {}", taskId);
+            }
+        } catch (Exception e) {
+            log.warn("notifyTeamLead failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Computes the sleep duration before a retry notification.
+     *
+     * <p>First 3 retries: 1 second each. Subsequent retries: increment by 1 second (4th=2s,
+     * 5th=3s, ...), capped at 30 seconds.
+     */
+    private static long computeRetryBackoffMs(int retryIndex) {
+        if (retryIndex < 3) {
+            return RETRY_BASE_SLEEP_MS;
+        }
+        return Math.min((retryIndex - 2) * RETRY_BASE_SLEEP_MS, 30_000L);
     }
 
     private String formatResult(String teamName, String taskId, String result) {
