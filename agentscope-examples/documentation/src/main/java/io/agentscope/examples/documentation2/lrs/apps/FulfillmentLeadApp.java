@@ -53,6 +53,8 @@ public class FulfillmentLeadApp {
     private static final Logger log = LoggerFactory.getLogger(FulfillmentLeadApp.class);
     private static final String AGENT_KEY = "fulfillment-lead";
     private static final int CONTRACT_PORT = 18091;
+    private static final String TEAM_NAME = "OrderFulfillmentTeam2";
+    private static final String NAMESPACE = "default";
 
     public static void main(String[] args) throws Exception {
         log.info("Starting {} ...", AGENT_KEY);
@@ -69,11 +71,17 @@ public class FulfillmentLeadApp {
         log.info("{} is running. Open the Service console to interact.", AGENT_KEY);
         log.info("Press Ctrl+C to stop.");
 
+//        // 启动 Session 健康监控器：每 6 秒检测 team 工具是否可用，丢失时主动恢复
+//        SessionHealthMonitor monitor =
+//                new SessionHealthMonitor(bridge, TEAM_NAME, NAMESPACE, agent);
+//        monitor.start();
+
         Runtime.getRuntime()
                 .addShutdownHook(
                         new Thread(
                                 () -> {
                                     log.info("Shutting down {} ...", AGENT_KEY);
+//                                    monitor.stop();
                                     bridge.close();
                                 }));
 

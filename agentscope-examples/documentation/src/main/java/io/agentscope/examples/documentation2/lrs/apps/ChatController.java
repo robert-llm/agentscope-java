@@ -274,8 +274,8 @@ public class ChatController {
                         }
                     } catch (Exception ignored) {
                         // best effort
-                        log.error("[SSE Stream] emitter send error (session={})", sessionId, ignored);
-
+                        log.error(
+                                "[SSE Stream] emitter send error (session={})", sessionId, ignored);
                     }
                     log.info("<<< [SSE Stream] completed (session={})", sessionId);
                     emitter.complete();
