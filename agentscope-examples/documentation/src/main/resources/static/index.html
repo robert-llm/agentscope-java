@@ -138,6 +138,8 @@
         const msgInput = document.getElementById('msgInput');
         const sendBtn = document.getElementById('sendBtn');
         const apiUrl = document.getElementById('apiUrl');
+        // 每个页面会话使用同一个 conversationId,保证多轮对话共享上下文
+        const conversationId = 'conv-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
 
         msgInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -192,7 +194,7 @@
                 const response = await fetch(`${baseUrl}/api/chat/stream`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message })
+                    body: JSON.stringify({ message, sessionId: conversationId })
                 });
 
                 const reader = response.body.getReader();

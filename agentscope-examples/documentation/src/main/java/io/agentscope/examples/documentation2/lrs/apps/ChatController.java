@@ -26,7 +26,7 @@ import io.agentscope.harness.agent.HarnessAgent;
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,7 +67,6 @@ public class ChatController {
 
     @Autowired private HarnessAgent routerAgent;
 
-    private final AtomicInteger sessionCounter = new AtomicInteger(0);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
@@ -98,10 +97,15 @@ public class ChatController {
 
         try {
             Msg input = Msg.builder().role(MsgRole.USER).textContent(message).build();
-            String sessionId = "api-session-" + sessionCounter.incrementAndGet();
+            // 客户端携带 sessionId 则复用(多轮对话共享上下文)，否则随机新建，避免重启后与旧会话撞号
+            String requestedSessionId = request.get("sessionId");
+            final String sessionId =
+                    (requestedSessionId == null || requestedSessionId.isBlank())
+                            ? "api-session-" + UUID.randomUUID()
+                            : requestedSessionId;
             RuntimeContext rc = RuntimeContext.builder().sessionId(sessionId).build();
 
-            log.info("Calling router-agent (session={})...", sessionId);
+            log.info(">>> [API Request] message={}, session={}", message, sessionId);
             long t0 = System.currentTimeMillis();
 
             Msg response = routerAgent.call(input, rc).block(Duration.ofMinutes(2));
@@ -162,7 +166,12 @@ public class ChatController {
 
         // 2-minute timeout for long-running agent tasks
         SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
-        String sessionId = "sse-session-" + sessionCounter.incrementAndGet();
+        // 客户端携带 sessionId 则复用(多轮对话共享上下文)，否则随机新建，避免重启后与旧会话撞号
+        String requestedSessionId = request.get("sessionId");
+        final String sessionId =
+                (requestedSessionId == null || requestedSessionId.isBlank())
+                        ? "sse-session-" + UUID.randomUUID()
+                        : requestedSessionId;
 
         log.info(">>> [SSE Stream] message={}, session={}", message, sessionId);
 
@@ -249,6 +258,7 @@ public class ChatController {
                                         .data(Map.of("error", error.getMessage())));
                     } catch (Exception ignored) {
                         // client may have disconnected
+                        log.error("[SSE Stream] emitter error (session={})", sessionId, ignored);
                     }
                     emitter.completeWithError(error);
                 },
@@ -264,6 +274,8 @@ public class ChatController {
                         }
                     } catch (Exception ignored) {
                         // best effort
+                        log.error("[SSE Stream] emitter send error (session={})", sessionId, ignored);
+
                     }
                     log.info("<<< [SSE Stream] completed (session={})", sessionId);
                     emitter.complete();
