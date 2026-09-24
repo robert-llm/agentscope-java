@@ -15,6 +15,7 @@
  */
 package io.agentscope.examples.documentation2.lrs.apps;
 
+import io.agentscope.core.state.JsonFileAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.documentation2.lrs.tools.RoutingTools;
 import io.agentscope.examples.documentation2.lrs.tools.TeamResultProcessor;
@@ -24,6 +25,7 @@ import io.agentscope.extensions.aistio.SessionBridge;
 import io.agentscope.extensions.aistio.adapter.AgentScopeAdapter;
 import io.agentscope.extensions.aistio.transport.ControlPlaneHttpClient;
 import io.agentscope.harness.agent.HarnessAgent;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -126,6 +128,11 @@ public class RouterAgentApp {
 
         toolkit.registerTool(new RoutingTools(httpClient, namespace, resultProcessor));
 
+        // 显式配置 session store：对话历史持久化到磁盘，重启后可通过 sessionId 恢复上下文
+        Path stateDir = agentStateDir(AGENT_KEY);
+        JsonFileAgentStateStore stateStore = new JsonFileAgentStateStore(stateDir);
+        log.info("Session state store: {}", stateDir);
+
         AgentScopeAdapter adapter = new AgentScopeAdapter();
 
         HarnessAgent agent =
@@ -138,6 +145,7 @@ public class RouterAgentApp {
                         .model("dashscope:qwen-plus")
                         .toolkit(toolkit)
                         .workspace(agentWorkspace(AGENT_KEY))
+                        .stateStore(stateStore)
                         .middleware(adapter.middleware())
                         .maxIters(30)
                         .disableFilesystemTools()
@@ -256,6 +264,15 @@ public class RouterAgentApp {
                         agentKey,
                         "workspace")
                 .toString();
+    }
+
+    private static Path agentStateDir(String agentKey) {
+        String override = System.getProperty("agentscope.state.home");
+        Path root =
+                override != null && !override.isBlank()
+                        ? Paths.get(override)
+                        : Paths.get(System.getProperty("user.home"), ".agentscope", "state");
+        return root.resolve(agentKey);
     }
 
     private static String uniqueInstanceId(String agentKey) {
