@@ -68,21 +68,29 @@ start() {
     # Detach into a new session so planes survive after this script (and Cursor/CI
     # wrappers) exit. macOS has no setsid(1); python3 is available on the supported
     # local toolchain.
-    python3 - "$LOG_DIR/${name}.log" "$@" <<'PY' &
-import os, sys
-log_path = sys.argv[1]
-argv = sys.argv[2:]
-os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
-os.setsid()
-log = open(log_path, "wb")
-os.dup2(log.fileno(), 1)
-os.dup2(log.fileno(), 2)
-devnull = open(os.devnull, "rb")
-os.dup2(devnull.fileno(), 0)
-os.execvpe(argv[0], argv, os.environ)
-PY
-    echo $! >"$pidfile"
-    echo "  * ${name} started (pid $!)"
+
+    # 使用 nonohup 后台运行，输出重定向到日志文▒|6
+    nohup env "$@" >> "$LOG_DIR/${name}.log" 2>&1 &
+    local pid=$!
+    echo "log_dir: $LOG_DIR/${name}.log"
+    echo $pid > "$pidfile"
+    echo "  * ${name} started (pid $pid)"
+
+#    python3 - "$LOG_DIR/${name}.log" "$@" <<'PY' &
+#import os, sys
+#log_path = sys.argv[1]
+#argv = sys.argv[2:]
+#os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+#os.setsid()
+#log = open(log_path, "wb")
+#os.dup2(log.fileno(), 1)
+#os.dup2(log.fileno(), 2)
+#devnull = open(os.devnull, "rb")
+#os.dup2(devnull.fileno(), 0)
+#os.execvpe(argv[0], argv, os.environ)
+#PY
+#    echo $! >"$pidfile"
+#    echo "  * ${name} started (pid $!)"
 }
 
 # ---------------------------------------------------------------- build Java
@@ -90,7 +98,7 @@ PY
 # fat jars embed ~/.m2 harness/core/extensions; a service-only build can keep a
 # stale snapshot. Root `mvn install` also walks agentscope-service children
 # (unlike `-pl agentscope-service`, which only builds the packaging=pom aggregator).
-if [ "${BUILDER_REBUILD:-0}" = "1" ] || [ ! -f "$(jar_of service-gateway || true)" ]; then
+if [ "${BUILDER_REBUILD:-0}" = "1" ] || [ "${BUILDER_REBUILD:-0}" = "2" ] || [ ! -f "$(jar_of service-gateway || true)" ]; then
     echo "==> Building agentscope-java monorepo (mvn install -DskipTests)"
     MONOREPO_ROOT="$(cd "$ROOT/.." && pwd)"
     (cd "$MONOREPO_ROOT" && mvn install -DskipTests -q)
@@ -98,7 +106,7 @@ fi
 
 # ---------------------------------------------------------------- build aistiod
 AISTIO_BIN="$ROOT/aistio/bin/aistiod"
-if [ "${BUILDER_REBUILD:-0}" = "1" ] || [ ! -x "$AISTIO_BIN" ]; then
+if [ "${BUILDER_REBUILD:-0}" = "1" ] || [ "${BUILDER_REBUILD:-0}" = "3" ] || [ ! -x "$AISTIO_BIN" ]; then
     echo "==> Building aistiod"
     (cd "$ROOT/aistio" && mkdir -p bin && go build -o bin/aistiod ./cmd/aistiod)
 fi
