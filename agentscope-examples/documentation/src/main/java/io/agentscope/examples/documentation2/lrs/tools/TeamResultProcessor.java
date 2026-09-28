@@ -29,7 +29,7 @@ package io.agentscope.examples.documentation2.lrs.tools;
  * <p>Implementations are registered at construction time on {@link RoutingTools},
  * so different deployments can customize the output format without changing tool code.
  *
- * <h3>Example</h3>
+ * <h2>Example</h2>
  *
  * <pre>{@code
  * TeamResultProcessor processor = (teamName, subject, rawResult) ->

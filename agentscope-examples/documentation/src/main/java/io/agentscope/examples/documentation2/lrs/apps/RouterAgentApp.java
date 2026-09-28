@@ -38,7 +38,7 @@ import org.springframework.context.annotation.Bean;
  * <p>This application is completely independent of any specific business domain.
  * It discovers available teams via the control plane API and routes tasks to them.
  *
- * <h3>Architecture</h3>
+ * <h2>Architecture</h2>
  *
  * <pre>{@code
  * Frontend / Business System
@@ -60,7 +60,7 @@ import org.springframework.context.annotation.Bean;
  *    └────────┘└────────┘└────────┘
  * }</pre>
  *
- * <h3>Key Design Decisions</h3>
+ * <h2>Key Design Decisions</h2>
  * <ul>
  *   <li>No dependency on OrderFulfillmentExample — this is a generic router
  *   <li>No team membership — uses control plane API to discover and route
