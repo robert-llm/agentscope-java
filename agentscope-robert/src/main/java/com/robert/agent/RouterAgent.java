@@ -127,7 +127,7 @@ public class RouterAgent {
             return future
                     .orTimeout(agentTimeoutSec, TimeUnit.SECONDS)
                     .exceptionally(t -> {
-                        log.warn("[router] agent=" + agentId + " 执行失败/超时: " + t.getMessage());
+                        log.warning("[router] agent=" + agentId + " 执行失败/超时: " + t.getMessage());
                         agg.emitDegraded(agentId, "该部分内容获取失败，请稍后重试。");
                         return AgentResult.degraded(agentId, t);
                     })

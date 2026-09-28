@@ -29,14 +29,16 @@ public class RouterAgentConfig {
                 .build();
     }
 
-//    @Bean
+    //    @Bean
 //    public AgentRegistry agentRegistry(ReActSmartAgent reActSmartAgent,
 //                                       ExecutorService agentExecutor) {
-//        AgentRegistry registry = new AgentRegistry();
+    @Bean
+    public AgentRegistry agentRegistry(ExecutorService agentExecutor) {
+        AgentRegistry registry = new AgentRegistry();
 //        registry.register(new EIPSubAgent(reActSmartAgent, agentExecutor));
-//        // registry.register(new LearningSubAgent(...));
-//        return registry;
-//    }
+        // registry.register(new LearningSubAgent(...));
+        return registry;
+    }
 
     @Bean
     public RouterAgent routerAgent(ReActAgent routerReActAgent,
