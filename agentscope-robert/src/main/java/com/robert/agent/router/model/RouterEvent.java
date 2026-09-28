@@ -1,4 +1,4 @@
-package com.robert.agent.router;
+package com.robert.agent.router.model;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -147,4 +147,8 @@ public class RouterEvent {
     public String getAgentId() { return agentId; }
     public long getSeq() { return seq; }
     public Map<String, Object> getPayload() { return payload; }
+
+    public void setSeq(long seq) {
+        this.seq = seq;
+    }
 }

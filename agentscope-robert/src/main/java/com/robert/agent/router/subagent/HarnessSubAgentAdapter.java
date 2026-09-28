@@ -1,6 +1,7 @@
 package com.robert.agent.router.subagent;
 
-import com.robert.agent.router.RouterEvent;
+import com.robert.agent.router.model.RouterEvent;
+import com.robert.agent.router.model.SubAgentRequest;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;

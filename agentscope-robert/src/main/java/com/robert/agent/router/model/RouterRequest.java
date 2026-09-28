@@ -1,4 +1,6 @@
-package com.robert.agent.router;
+package com.robert.agent.router.model;
+
+import com.robert.agent.router.AgentChatContext;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;

@@ -1,6 +1,7 @@
 package com.robert.agent.router.subagent;
 
-import com.robert.agent.router.RouterEvent;
+import com.robert.agent.router.model.RouterEvent;
+import com.robert.agent.router.model.SubAgentRequest;
 import reactor.core.publisher.Flux;
 
 /**

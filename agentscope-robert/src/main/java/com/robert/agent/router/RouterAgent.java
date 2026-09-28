@@ -1,13 +1,13 @@
 package com.robert.agent.router;
 
+import com.robert.agent.router.model.RouterEvent;
+import com.robert.agent.router.model.RouterRequest;
 import com.robert.agent.router.subagent.SubAgent;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.SystemMessage;
-import io.agentscope.core.message.UserMessage;
 import com.robert.agent.router.model.RoutingDecision;
-import com.robert.agent.router.subagent.SubAgentRequest;
+import com.robert.agent.router.model.SubAgentRequest;
 
 import java.time.Duration;
 import java.util.List;
@@ -157,7 +157,7 @@ public class RouterAgent {
                 agent.stream(subReq)
                         .timeout(Duration.ofSeconds(agentTimeoutSec))
                         .doOnNext(event -> {
-                            event.seq = seqGenerator.incrementAndGet();
+                            event.setSeq(seqGenerator.incrementAndGet());
                             sink.next(event);
                         })
                         .blockLast();
@@ -188,7 +188,10 @@ public class RouterAgent {
                 .map(a -> "- " + a.agentId() + ": " + a.description())
                 .reduce("", (a, b) -> a + "\n" + b);
 
-        String sysPrompt = buildRoutePrompt(agentsList);
+        String routePrompt = buildRoutePrompt(agentsList);
+
+        // 将路由指令与用户问题合并到 UserMessage（框架禁止在 call 输入中传入 SystemMessage）
+        String userText = routePrompt + "\n\n## 用户问题 ##\n" + request.getQuestion();
 
         RuntimeContext runtimeCtx = RuntimeContext.builder()
                 .sessionId("router-" + request.getMessageId())
@@ -197,12 +200,7 @@ public class RouterAgent {
 
         try {
             Msg result = planningModel
-                    .call(
-                            List.of(new SystemMessage(sysPrompt),
-                                    new UserMessage(request.getQuestion())),
-                            RoutingDecision.class,
-                            runtimeCtx
-                    )
+                    .call(userText, RoutingDecision.class, runtimeCtx)
                     .block();
 
             if (result == null) {
@@ -221,6 +219,28 @@ public class RouterAgent {
     }
 
     private String buildRoutePrompt(String agentsList) {
+//        return """
+//            你是一个 金地集团内部多 Agent 智能体的路由编排器。
+//            你的唯一职责是：分析用户问题，一次性决定调用哪些子 Agent 处理。
+//            你不需要回答问题、不需要检索资料、不需要生成答案——最终回答由子 Agent 完成。
+//
+//            ### 输出要求 ###
+//            必须返回 JSON，包含 thought（单行思考摘要）和 subAgents（子 Agent id 列表）。
+//
+//            ### 可用子 Agent（只允许从以下列表中选择，禁止凭空编造 id）###
+//            %s
+//
+//            ### 路由规则 ###
+//            1. 制度 / 新闻 / 公告 / 流程 / 组织 / HR / IT → eip-agent
+//            2. 课程 / 课件 / 讲师 / 学习 / 培训 / 视频课 → learning-agent
+//            3. 同一问题同时涉及两个域 → 两个子 Agent 依次执行（subAgents 顺序即执行顺序）
+//            4. 无法判断 / 闲聊 → 默认路由 eip-agent
+//
+//            ### 硬性约束（最高优先级）###
+//            - 只做一次决策：subAgents 一次性给出全部路由目标
+//            - 禁止重复：subAgents 中同一子 Agent 最多出现一次
+//            - thought 单行、禁止英文双引号（用「」『』）、禁止反斜杠
+//            """.formatted(agentsList);
         return """
             你是一个 金地集团内部多 Agent 智能体的路由编排器。
             你的唯一职责是：分析用户问题，一次性决定调用哪些子 Agent 处理。
@@ -236,7 +256,7 @@ public class RouterAgent {
             1. 制度 / 新闻 / 公告 / 流程 / 组织 / HR / IT → eip-agent
             2. 课程 / 课件 / 讲师 / 学习 / 培训 / 视频课 → learning-agent
             3. 同一问题同时涉及两个域 → 两个子 Agent 依次执行（subAgents 顺序即执行顺序）
-            4. 无法判断 / 闲聊 → 默认路由 eip-agent
+            4. 上面的规则都无法判断 → 根据问题的内容和agent的描述信息匹配度，决定调用哪些agent
 
             ### 硬性约束（最高优先级）###
             - 只做一次决策：subAgents 一次性给出全部路由目标

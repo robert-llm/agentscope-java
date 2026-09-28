@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Router Agent - 流式对话</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #fff;
+        }
+        .header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.5px; }
+        .header .config {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+        }
+        .header .config label { opacity: 0.7; }
+        .header .config input, .header .config select {
+            padding: 5px 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            font-size: 12px;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            outline: none;
+        }
+        .header .config input::placeholder { color: rgba(255,255,255,0.4); }
+        .header .config input:focus, .header .config select:focus {
+            border-color: #4096ff;
+            background: rgba(255,255,255,0.15);
+        }
+
+        /* Chat Area */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.7;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #1677ff;
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant {
+            align-self: flex-start;
+            background: #fff;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .message.system {
+            align-self: center;
+            background: #f5f5f5;
+            color: #999;
+            font-size: 12px;
+            padding: 6px 14px;
+            border-radius: 20px;
+        }
+
+        /* Agent badge */
+        .agent-badge {
+            display: inline-block;
+            font-size: 11px;
+            color: #1677ff;
+            background: #e6f4ff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-bottom: 6px;
+        }
+
+        /* Event log */
+        .event-log {
+            font-size: 11px;
+            color: #aaa;
+            margin-top: 6px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            line-height: 1.4;
+        }
+
+        /* Think block */
+        .think-block {
+            background: #fafafa;
+            border-left: 3px solid #faad14;
+            padding: 8px 12px;
+            margin: 6px 0;
+            font-size: 13px;
+            color: #666;
+            border-radius: 0 6px 6px 0;
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            color: #999;
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .typing-indicator .dot {
+            width: 6px; height: 6px;
+            background: #bbb;
+            border-radius: 50%;
+            animation: bounce 1.2s infinite;
+        }
+        .typing-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* Node status */
+        .node-status {
+            font-size: 11px;
+            color: #52c41a;
+            margin: 2px 0;
+        }
+
+        /* Input Area */
+        .input-area {
+            background: #fff;
+            padding: 16px 24px;
+            border-top: 1px solid #e8e8e8;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        .input-area textarea {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid #d9d9d9;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+            min-height: 44px;
+            max-height: 120px;
+            line-height: 1.5;
+        }
+        .input-area textarea:focus { border-color: #1677ff; }
+        .input-area button {
+            padding: 10px 28px;
+            background: #1677ff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .input-area button:hover { background: #4096ff; }
+        .input-area button:disabled { background: #d9d9d9; cursor: not-allowed; }
+
+        /* Scrollbar */
+        .chat-area::-webkit-scrollbar { width: 6px; }
+        .chat-area::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Router Agent - 流式对话</h1>
+        <div class="config">
+            <label>API:</label>
+            <input id="apiUrl" value="http://localhost:18096" style="width:180px" />
+            <label>目标Agent:</label>
+            <input id="targetAgent" placeholder="自动路由" style="width:120px" />
+            <label>用户:</label>
+            <input id="loginName" value="tester" style="width:80px" />
+        </div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+        <div class="message system">输入消息开始对话 · SSE 流式输出 · 支持指定目标 Agent</div>
+    </div>
+
+    <div class="input-area">
+        <textarea id="msgInput" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)" rows="1"></textarea>
+        <button id="sendBtn" onclick="sendMessage()">发送</button>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chatArea');
+        const msgInput = document.getElementById('msgInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const apiUrlInput = document.getElementById('apiUrl');
+        const targetAgentInput = document.getElementById('targetAgent');
+        const loginNameInput = document.getElementById('loginName');
+
+        let msgCounter = 0;
+
+        // ---- Keyboard & resize ----
+        msgInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        msgInput.addEventListener('input', () => {
+            msgInput.style.height = 'auto';
+            msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+        });
+
+        // ---- DOM helpers ----
+        function addMessage(role, html) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            if (typeof html === 'string') {
+                div.innerHTML = html;
+            }
+            chatArea.appendChild(div);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return div;
+        }
+
+        function addEventLog(div, text) {
+            let log = div.querySelector('.event-log');
+            if (!log) {
+                log = document.createElement('div');
+                log.className = 'event-log';
+                div.appendChild(log);
+            }
+            log.textContent += (log.textContent ? ' · ' : '') + text;
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function ensureTextSpan(div) {
+            let span = div.querySelector('.text-content');
+            if (!span) {
+                // Remove typing indicator if present
+                const typing = div.querySelector('.typing-indicator');
+                if (typing) typing.remove();
+                span = document.createElement('span');
+                span.className = 'text-content';
+                div.appendChild(span);
+            }
+            return span;
+        }
+
+        function ensureThinkBlock(div) {
+            let block = div.querySelector('.think-block');
+            if (!block) {
+                block = document.createElement('div');
+                block.className = 'think-block';
+                // Insert before text content
+                const textSpan = div.querySelector('.text-content');
+                if (textSpan) {
+                    div.insertBefore(block, textSpan);
+                } else {
+                    div.appendChild(block);
+                }
+            }
+            return block;
+        }
+
+        // ---- Send message ----
+        async function sendMessage() {
+            const question = msgInput.value.trim();
+            if (!question) return;
+
+            msgInput.value = '';
+            msgInput.style.height = 'auto';
+            sendBtn.disabled = true;
+            msgCounter++;
+
+            // User message
+            addMessage('user', escapeHtml(question));
+
+            // Assistant placeholder
+            const assistantDiv = addMessage('assistant',
+                '<div class="typing-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>'
+            );
+
+            const baseUrl = apiUrlInput.value.replace(/\/+$/, '');
+            const targetAgent = targetAgentInput.value.trim();
+            const loginName = loginNameInput.value.trim() || 'tester';
+            const msgId = 'msg-' + Date.now() + '-' + msgCounter;
+
+            // Build request body
+            const body = {
+                question: question,
+                conversationId: 'conv-' + Date.now(),
+                messageId: msgId,
+                loginName: loginName
+            };
+            if (targetAgent) {
+                body.targetTeams = [targetAgent];
+            }
+
+            let eventCount = 0;
+            let hasError = false;
+
+            try {
+                const response = await fetch(`${baseUrl}/api/router/stream`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data:')) {
+                            const dataStr = line.substring(5).trim();
+                            if (!dataStr) continue;
+                            try {
+                                const frame = JSON.parse(dataStr);
+                                eventCount++;
+                                handleRouterEvent(frame, assistantDiv);
+                            } catch (e) {
+                                // Not valid JSON — skip
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                hasError = true;
+                assistantDiv.innerHTML = `<span style="color:#ff4d4f">请求失败: ${escapeHtml(err.message)}</span>`;
+            }
+
+            // Finalize
+            if (!hasError) {
+                // Remove typing indicator if still present
+                const typing = assistantDiv.querySelector('.typing-indicator');
+                if (typing) typing.remove();
+
+                if (!assistantDiv.querySelector('.text-content') && !assistantDiv.querySelector('.think-block')) {
+                    assistantDiv.innerHTML += '<span style="color:#999">(无响应)</span>';
+                }
+                addEventLog(assistantDiv, `完成 (${eventCount} events)`);
+            }
+
+            sendBtn.disabled = false;
+            msgInput.focus();
+        }
+
+        // ---- Handle RouterEvent ----
+        function handleRouterEvent(frame, div) {
+            const type = frame.event;
+            const agentId = frame.agentId;
+            const data = frame.data || {};
+
+            switch (type) {
+                case 'workflow_started':
+                    addEventLog(div, '🚀 workflow started');
+                    break;
+
+                case 'plan':
+                    const nodeList = data.nodeList || [];
+                    const finished = data.finished || 0;
+                    const names = nodeList.map(n => n.agentId || n.id || '?').join(' → ');
+                    addEventLog(div, `📋 plan: [${names}] (${finished} done)`);
+                    break;
+
+                case 'node_started':
+                    // Show agent badge
+                    if (agentId) {
+                        const badge = document.createElement('div');
+                        badge.className = 'agent-badge';
+                        badge.textContent = '🤖 ' + agentId;
+                        const typing = div.querySelector('.typing-indicator');
+                        if (typing) {
+                            div.insertBefore(badge, typing);
+                        } else {
+                            div.appendChild(badge);
+                        }
+                    }
+                    addEventLog(div, `▶ ${agentId || 'node'} started`);
+                    break;
+
+                case 'message':
+                    // Streaming text fragment
+                    const span = ensureTextSpan(div);
+                    span.textContent += (data.answer || '');
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    break;
+
+                case 'think':
+                    // Thinking text
+                    const thinkBlock = ensureThinkBlock(div);
+                    thinkBlock.textContent += (data.answer || '');
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    break;
+
+                case 'think_time':
+                    // Thinking indicator / metadata
+                    const tb = ensureThinkBlock(div);
+                    if (!tb.textContent) {
+                        tb.textContent = data.think_time || '思考中...';
+                    }
+                    break;
+
+                case 'node_finished':
+                    addEventLog(div, `✓ ${agentId || 'node'} finished`);
+                    break;
+
+                case 'workflow_finished':
+                    addEventLog(div, '🏁 workflow finished');
+                    break;
+
+                case 'message_end':
+                    // Stream complete
+                    break;
+
+                case 'error':
+                    const errDiv = document.createElement('div');
+                    errDiv.style.cssText = 'color:#ff4d4f;font-size:13px;margin-top:6px;';
+                    errDiv.textContent = '❌ ' + (data.message || '未知错误');
+                    div.appendChild(errDiv);
+                    break;
+
+                default:
+                    addEventLog(div, type);
+                    break;
+            }
+        }
+
+        // ---- Utility ----
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Focus input on load
+        msgInput.focus();
+    </script>
+</body>
+</html>

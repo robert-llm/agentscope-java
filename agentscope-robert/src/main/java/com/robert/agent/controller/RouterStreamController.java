@@ -2,8 +2,8 @@ package com.robert.agent.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.robert.agent.router.RouterAgent;
-import com.robert.agent.router.RouterEvent;
-import com.robert.agent.router.RouterRequest;
+import com.robert.agent.router.model.RouterEvent;
+import com.robert.agent.router.model.RouterRequest;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -24,11 +24,10 @@ import java.util.Map;
 public class RouterStreamController {
 
     private final RouterAgent routerAgent;
-    private final ObjectMapper objectMapper;
+    private final static ObjectMapper objectMapper = new ObjectMapper();
 
-    public RouterStreamController(RouterAgent routerAgent, ObjectMapper objectMapper) {
+    public RouterStreamController(RouterAgent routerAgent) {
         this.routerAgent = routerAgent;
-        this.objectMapper = objectMapper;
     }
 
     /**
