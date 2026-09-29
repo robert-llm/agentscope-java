@@ -111,7 +111,7 @@ public class RouterAgent {
                 : plan(request);
 
         if (targets.isEmpty()) {
-            targets = List.of("eip-agent");
+            targets = List.of("chat-agent");
         }
         log.info("[router] 路由目标: " + targets);
 
@@ -204,8 +204,8 @@ public class RouterAgent {
                     .block();
 
             if (result == null) {
-                log.warning("[router] 规划返回 null，兜底 eip-agent");
-                return List.of("eip-agent");
+                log.warning("[router] 规划返回 null，兜底 chat-agent");
+                return List.of("chat-agent");
             }
 
             RoutingDecision decision = result.getStructuredData(RoutingDecision.class);
@@ -213,8 +213,8 @@ public class RouterAgent {
                     + " subAgents=" + decision.subAgents);
             return decision.subAgents;
         } catch (Exception e) {
-            log.warning("[router] 规划失败，兜底 eip-agent: " + e.getMessage());
-            return List.of("eip-agent");
+            log.warning("[router] 规划失败，兜底 chat-agent: " + e.getMessage());
+            return List.of("chat-agent");
         }
     }
 
