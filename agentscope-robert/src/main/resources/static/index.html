@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Router Agent - 流式对话</title>
+    <title>Router Agent - 流式事件调试器</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            background: #f0f2f5;
+            background: #0d1117;
+            color: #c9d1d9;
             height: 100vh;
             display: flex;
             flex-direction: column;
@@ -16,191 +17,220 @@
 
         /* Header */
         .header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            padding: 14px 24px;
+            background: #161b22;
+            padding: 12px 20px;
+            border-bottom: 1px solid #30363d;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            color: #fff;
+            flex-shrink: 0;
         }
-        .header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.5px; }
+        .header h1 { font-size: 15px; color: #58a6ff; font-weight: 600; }
         .header .config {
+            display: flex; align-items: center; gap: 10px; font-size: 12px;
+        }
+        .header .config label { color: #8b949e; }
+        .header .config input {
+            padding: 4px 8px; border: 1px solid #30363d; border-radius: 6px;
+            font-size: 12px; background: #0d1117; color: #c9d1d9; outline: none;
+        }
+        .header .config input:focus { border-color: #58a6ff; }
+
+        /* Main layout */
+        .main {
+            flex: 1;
             display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 12px;
-        }
-        .header .config label { opacity: 0.7; }
-        .header .config input, .header .config select {
-            padding: 5px 10px;
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 6px;
-            font-size: 12px;
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            outline: none;
-        }
-        .header .config input::placeholder { color: rgba(255,255,255,0.4); }
-        .header .config input:focus, .header .config select:focus {
-            border-color: #4096ff;
-            background: rgba(255,255,255,0.15);
+            overflow: hidden;
         }
 
-        /* Chat Area */
-        .chat-area {
+        /* Event timeline (left) */
+        .timeline {
             flex: 1;
             overflow-y: auto;
-            padding: 24px;
+            padding: 16px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
-        }
-        .message {
-            max-width: 80%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            line-height: 1.7;
-            font-size: 14px;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .message.user {
-            align-self: flex-end;
-            background: #1677ff;
-            color: #fff;
-            border-bottom-right-radius: 4px;
-        }
-        .message.assistant {
-            align-self: flex-start;
-            background: #fff;
-            color: #333;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-        }
-        .message.system {
-            align-self: center;
-            background: #f5f5f5;
-            color: #999;
-            font-size: 12px;
-            padding: 6px 14px;
-            border-radius: 20px;
+            gap: 2px;
         }
 
-        /* Agent badge */
-        .agent-badge {
-            display: inline-block;
-            font-size: 11px;
-            color: #1677ff;
-            background: #e6f4ff;
-            padding: 2px 8px;
-            border-radius: 10px;
-            margin-bottom: 6px;
-        }
-
-        /* Event log */
-        .event-log {
-            font-size: 11px;
-            color: #aaa;
-            margin-top: 6px;
-            font-family: 'Consolas', 'Courier New', monospace;
-            line-height: 1.4;
-        }
-
-        /* Think block */
-        .think-block {
-            background: #fafafa;
-            border-left: 3px solid #faad14;
-            padding: 8px 12px;
-            margin: 6px 0;
+        /* Event row */
+        .event-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 6px 10px;
+            border-radius: 6px;
             font-size: 13px;
-            color: #666;
-            border-radius: 0 6px 6px 0;
+            line-height: 1.5;
+            animation: fadeIn 0.15s ease-in;
+            border-left: 3px solid transparent;
+        }
+        .event-row:hover { background: #161b22; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-2px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Typing indicator */
-        .typing-indicator {
-            color: #999;
-            font-style: italic;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .typing-indicator .dot {
-            width: 6px; height: 6px;
-            background: #bbb;
-            border-radius: 50%;
-            animation: bounce 1.2s infinite;
-        }
-        .typing-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes bounce {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-4px); }
-        }
-
-        /* Node status */
-        .node-status {
+        /* Seq number */
+        .seq {
+            color: #484f58;
             font-size: 11px;
-            color: #52c41a;
-            margin: 2px 0;
+            font-family: 'Consolas', monospace;
+            min-width: 32px;
+            text-align: right;
+            padding-top: 2px;
         }
 
-        /* Input Area */
+        /* Event type badge */
+        .type-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            min-width: 90px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        /* Event content */
+        .event-content {
+            flex: 1;
+            word-break: break-word;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        /* Agent tag */
+        .agent-tag {
+            font-size: 10px;
+            color: #8b949e;
+            background: #21262d;
+            padding: 1px 6px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        /* ---- Event type colors ---- */
+        .event-row.workflow_started { border-left-color: #3fb950; }
+        .event-row.workflow_started .type-badge { background: #0d3321; color: #3fb950; }
+
+        .event-row.workflow_finished { border-left-color: #3fb950; }
+        .event-row.workflow_finished .type-badge { background: #0d3321; color: #3fb950; }
+
+        .event-row.plan { border-left-color: #d29922; }
+        .event-row.plan .type-badge { background: #2a1f05; color: #d29922; }
+
+        .event-row.node_started { border-left-color: #58a6ff; }
+        .event-row.node_started .type-badge { background: #0c2d6b; color: #58a6ff; }
+
+        .event-row.node_finished { border-left-color: #8b949e; }
+        .event-row.node_finished .type-badge { background: #21262d; color: #8b949e; }
+
+        .event-row.message { border-left-color: #c9d1d9; background: #161b22; }
+        .event-row.message .type-badge { background: #1f2937; color: #79c0ff; }
+
+        .event-row.think { border-left-color: #d2a8ff; background: #1a1525; }
+        .event-row.think .type-badge { background: #271c3e; color: #d2a8ff; }
+
+        .event-row.think_time { border-left-color: #d2a8ff; }
+        .event-row.think_time .type-badge { background: #271c3e; color: #d2a8ff; }
+
+        .event-row.message_end { border-left-color: #3fb950; }
+        .event-row.message_end .type-badge { background: #0d3321; color: #3fb950; }
+
+        .event-row.error { border-left-color: #f85149; background: #2d1214; }
+        .event-row.error .type-badge { background: #3d1214; color: #f85149; }
+
+        /* Separator for lifecycle events */
+        .event-row.lifecycle-sep {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #21262d;
+        }
+
+        /* Input area */
         .input-area {
-            background: #fff;
-            padding: 16px 24px;
-            border-top: 1px solid #e8e8e8;
+            background: #161b22;
+            padding: 12px 20px;
+            border-top: 1px solid #30363d;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: flex-end;
+            flex-shrink: 0;
         }
         .input-area textarea {
-            flex: 1;
-            padding: 10px 14px;
-            border: 1px solid #d9d9d9;
-            border-radius: 8px;
-            font-size: 14px;
-            font-family: inherit;
-            resize: none;
-            outline: none;
-            min-height: 44px;
-            max-height: 120px;
+            flex: 1; padding: 8px 12px; border: 1px solid #30363d; border-radius: 8px;
+            font-size: 13px; font-family: inherit; resize: none; outline: none;
+            min-height: 40px; max-height: 100px; background: #0d1117; color: #c9d1d9;
             line-height: 1.5;
         }
-        .input-area textarea:focus { border-color: #1677ff; }
+        .input-area textarea:focus { border-color: #58a6ff; }
         .input-area button {
-            padding: 10px 28px;
-            background: #1677ff;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            white-space: nowrap;
+            padding: 8px 24px; background: #238636; color: #fff; border: none;
+            border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap;
         }
-        .input-area button:hover { background: #4096ff; }
-        .input-area button:disabled { background: #d9d9d9; cursor: not-allowed; }
+        .input-area button:hover { background: #2ea043; }
+        .input-area button:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+        /* Stats bar */
+        .stats-bar {
+            background: #161b22;
+            padding: 6px 20px;
+            border-bottom: 1px solid #30363d;
+            font-size: 11px;
+            color: #8b949e;
+            display: flex;
+            gap: 16px;
+            flex-shrink: 0;
+            font-family: 'Consolas', monospace;
+        }
+        .stats-bar span { display: inline-flex; align-items: center; gap: 4px; }
+        .stats-bar .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+        .stats-bar .dot.green { background: #3fb950; }
+        .stats-bar .dot.blue { background: #58a6ff; }
+        .stats-bar .dot.yellow { background: #d29922; }
+        .stats-bar .dot.red { background: #f85149; }
 
         /* Scrollbar */
-        .chat-area::-webkit-scrollbar { width: 6px; }
-        .chat-area::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 3px; }
+        .timeline::-webkit-scrollbar { width: 6px; }
+        .timeline::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+        /* User message display */
+        .event-row.user-msg {
+            border-left-color: #58a6ff;
+            background: #0c2d6b33;
+        }
+        .event-row.user-msg .type-badge {
+            background: #0c2d6b; color: #58a6ff;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Router Agent - 流式对话</h1>
+        <h1>⚡ Router Agent - 流式事件调试器</h1>
         <div class="config">
             <label>API:</label>
-            <input id="apiUrl" value="http://localhost:18096" style="width:180px" />
+            <input id="apiUrl" value="http://localhost:18096" style="width:170px" />
             <label>目标Agent:</label>
-            <input id="targetAgent" placeholder="自动路由" style="width:120px" />
+            <input id="targetAgent" placeholder="自动路由" style="width:110px" />
             <label>用户:</label>
-            <input id="loginName" value="tester" style="width:80px" />
+            <input id="loginName" value="tester" style="width:70px" />
         </div>
     </div>
 
-    <div class="chat-area" id="chatArea">
-        <div class="message system">输入消息开始对话 · SSE 流式输出 · 支持指定目标 Agent</div>
+    <div class="stats-bar" id="statsBar">
+        <span><span class="dot green"></span> events: <b id="statEvents">0</b></span>
+        <span><span class="dot blue"></span> messages: <b id="statMessages">0</b></span>
+        <span><span class="dot yellow"></span> thinks: <b id="statThinks">0</b></span>
+        <span><span class="dot red"></span> errors: <b id="statErrors">0</b></span>
+        <span>⏱ elapsed: <b id="statElapsed">-</b></span>
+    </div>
+
+    <div class="timeline" id="timeline">
+        <!-- Events will be appended here -->
     </div>
 
     <div class="input-area">
@@ -209,7 +239,7 @@
     </div>
 
     <script>
-        const chatArea = document.getElementById('chatArea');
+        const timeline = document.getElementById('timeline');
         const msgInput = document.getElementById('msgInput');
         const sendBtn = document.getElementById('sendBtn');
         const apiUrlInput = document.getElementById('apiUrl');
@@ -217,6 +247,41 @@
         const loginNameInput = document.getElementById('loginName');
 
         let msgCounter = 0;
+        let startTime = 0;
+        let elapsedTimer = null;
+
+        // ---- Message buffer: aggregate small chunks ----
+        const MIN_DISPLAY_LEN = 10; // 最小显示字符数
+        let msgBuffer = '';      // message 缓冲区
+        let msgBufferAgent = null;
+        let msgBufferStartSeq = null;
+        let thinkBuffer = '';    // think 缓冲区
+        let thinkBufferAgent = null;
+        let thinkBufferStartSeq = null;
+
+        // Stats
+        let stats = { events: 0, messages: 0, thinks: 0, errors: 0 };
+
+        function updateStats() {
+            document.getElementById('statEvents').textContent = stats.events;
+            document.getElementById('statMessages').textContent = stats.messages;
+            document.getElementById('statThinks').textContent = stats.thinks;
+            document.getElementById('statErrors').textContent = stats.errors;
+        }
+
+        function startElapsed() {
+            startTime = Date.now();
+            if (elapsedTimer) clearInterval(elapsedTimer);
+            elapsedTimer = setInterval(() => {
+                const ms = Date.now() - startTime;
+                document.getElementById('statElapsed').textContent =
+                    ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's';
+            }, 100);
+        }
+
+        function stopElapsed() {
+            if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+        }
 
         // ---- Keyboard & resize ----
         msgInput.addEventListener('keydown', (e) => {
@@ -227,59 +292,45 @@
         });
         msgInput.addEventListener('input', () => {
             msgInput.style.height = 'auto';
-            msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+            msgInput.style.height = Math.min(msgInput.scrollHeight, 100) + 'px';
         });
 
-        // ---- DOM helpers ----
-        function addMessage(role, html) {
-            const div = document.createElement('div');
-            div.className = `message ${role}`;
-            if (typeof html === 'string') {
-                div.innerHTML = html;
-            }
-            chatArea.appendChild(div);
-            chatArea.scrollTop = chatArea.scrollHeight;
-            return div;
-        }
+        // ---- Add event row ----
+        function addEventRow(type, seq, agentId, content, isSep) {
+            const row = document.createElement('div');
+            row.className = `event-row ${type}`;
+            if (isSep) row.classList.add('lifecycle-sep');
 
-        function addEventLog(div, text) {
-            let log = div.querySelector('.event-log');
-            if (!log) {
-                log = document.createElement('div');
-                log.className = 'event-log';
-                div.appendChild(log);
-            }
-            log.textContent += (log.textContent ? ' · ' : '') + text;
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
+            // Seq
+            const seqSpan = document.createElement('span');
+            seqSpan.className = 'seq';
+            seqSpan.textContent = seq != null ? '#' + seq : '';
+            row.appendChild(seqSpan);
 
-        function ensureTextSpan(div) {
-            let span = div.querySelector('.text-content');
-            if (!span) {
-                // Remove typing indicator if present
-                const typing = div.querySelector('.typing-indicator');
-                if (typing) typing.remove();
-                span = document.createElement('span');
-                span.className = 'text-content';
-                div.appendChild(span);
-            }
-            return span;
-        }
+            // Type badge
+            const badge = document.createElement('span');
+            badge.className = 'type-badge';
+            badge.textContent = type;
+            row.appendChild(badge);
 
-        function ensureThinkBlock(div) {
-            let block = div.querySelector('.think-block');
-            if (!block) {
-                block = document.createElement('div');
-                block.className = 'think-block';
-                // Insert before text content
-                const textSpan = div.querySelector('.text-content');
-                if (textSpan) {
-                    div.insertBefore(block, textSpan);
-                } else {
-                    div.appendChild(block);
-                }
+            // Agent tag (if present)
+            if (agentId) {
+                const tag = document.createElement('span');
+                tag.className = 'agent-tag';
+                tag.textContent = agentId;
+                row.appendChild(tag);
             }
-            return block;
+
+            // Content
+            const contentSpan = document.createElement('span');
+            contentSpan.className = 'event-content';
+            contentSpan.textContent = content;
+            row.appendChild(contentSpan);
+
+            timeline.appendChild(row);
+            timeline.scrollTop = timeline.scrollHeight;
+
+            return contentSpan;
         }
 
         // ---- Send message ----
@@ -292,20 +343,23 @@
             sendBtn.disabled = true;
             msgCounter++;
 
-            // User message
-            addMessage('user', escapeHtml(question));
+            // Reset stats
+            stats = { events: 0, messages: 0, thinks: 0, errors: 0 };
+            updateStats();
 
-            // Assistant placeholder
-            const assistantDiv = addMessage('assistant',
-                '<div class="typing-indicator"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>'
-            );
+            // User message as event
+            addEventRow('user_msg', null, null, question, true);
+
+            // Separator
+            addSeparator('▼ 流式响应');
+
+            startElapsed();
 
             const baseUrl = apiUrlInput.value.replace(/\/+$/, '');
             const targetAgent = targetAgentInput.value.trim();
             const loginName = loginNameInput.value.trim() || 'tester';
             const msgId = 'msg-' + Date.now() + '-' + msgCounter;
 
-            // Build request body
             const body = {
                 question: question,
                 conversationId: 'conv-' + Date.now(),
@@ -315,9 +369,6 @@
             if (targetAgent) {
                 body.targetTeams = [targetAgent];
             }
-
-            let eventCount = 0;
-            let hasError = false;
 
             try {
                 const response = await fetch(`${baseUrl}/api/router/stream`, {
@@ -348,121 +399,138 @@
                             if (!dataStr) continue;
                             try {
                                 const frame = JSON.parse(dataStr);
-                                eventCount++;
-                                handleRouterEvent(frame, assistantDiv);
+                                stats.events++;
+                                handleEvent(frame);
+                                updateStats();
                             } catch (e) {
-                                // Not valid JSON — skip
+                                // Skip non-JSON
                             }
                         }
                     }
                 }
             } catch (err) {
-                hasError = true;
-                assistantDiv.innerHTML = `<span style="color:#ff4d4f">请求失败: ${escapeHtml(err.message)}</span>`;
+                stats.errors++;
+                updateStats();
+                addEventRow('error', null, null, '请求失败: ' + err.message, false);
             }
 
-            // Finalize
-            if (!hasError) {
-                // Remove typing indicator if still present
-                const typing = assistantDiv.querySelector('.typing-indicator');
-                if (typing) typing.remove();
-
-                if (!assistantDiv.querySelector('.text-content') && !assistantDiv.querySelector('.think-block')) {
-                    assistantDiv.innerHTML += '<span style="color:#999">(无响应)</span>';
-                }
-                addEventLog(assistantDiv, `完成 (${eventCount} events)`);
-            }
+            flushAll();
+            stopElapsed();
+            addSeparator('▼ 结束 (' + stats.events + ' events, ' +
+                document.getElementById('statElapsed').textContent + ')');
 
             sendBtn.disabled = false;
             msgInput.focus();
         }
 
-        // ---- Handle RouterEvent ----
-        function handleRouterEvent(frame, div) {
-            const type = frame.event;
-            const agentId = frame.agentId;
-            const data = frame.data || {};
+        function addSeparator(text) {
+            const sep = document.createElement('div');
+            sep.style.cssText = 'text-align:center;padding:8px 0 4px;color:#484f58;font-size:11px;font-family:Consolas,monospace;';
+            sep.textContent = text;
+            timeline.appendChild(sep);
+            timeline.scrollTop = timeline.scrollHeight;
+        }
 
-            switch (type) {
-                case 'workflow_started':
-                    addEventLog(div, '🚀 workflow started');
-                    break;
-
-                case 'plan':
-                    const nodeList = data.nodeList || [];
-                    const finished = data.finished || 0;
-                    const names = nodeList.map(n => n.agentId || n.id || '?').join(' → ');
-                    addEventLog(div, `📋 plan: [${names}] (${finished} done)`);
-                    break;
-
-                case 'node_started':
-                    // Show agent badge
-                    if (agentId) {
-                        const badge = document.createElement('div');
-                        badge.className = 'agent-badge';
-                        badge.textContent = '🤖 ' + agentId;
-                        const typing = div.querySelector('.typing-indicator');
-                        if (typing) {
-                            div.insertBefore(badge, typing);
-                        } else {
-                            div.appendChild(badge);
-                        }
-                    }
-                    addEventLog(div, `▶ ${agentId || 'node'} started`);
-                    break;
-
-                case 'message':
-                    // Streaming text fragment
-                    const span = ensureTextSpan(div);
-                    span.textContent += (data.answer || '');
-                    chatArea.scrollTop = chatArea.scrollHeight;
-                    break;
-
-                case 'think':
-                    // Thinking text
-                    const thinkBlock = ensureThinkBlock(div);
-                    thinkBlock.textContent += (data.answer || '');
-                    chatArea.scrollTop = chatArea.scrollHeight;
-                    break;
-
-                case 'think_time':
-                    // Thinking indicator / metadata
-                    const tb = ensureThinkBlock(div);
-                    if (!tb.textContent) {
-                        tb.textContent = data.think_time || '思考中...';
-                    }
-                    break;
-
-                case 'node_finished':
-                    addEventLog(div, `✓ ${agentId || 'node'} finished`);
-                    break;
-
-                case 'workflow_finished':
-                    addEventLog(div, '🏁 workflow finished');
-                    break;
-
-                case 'message_end':
-                    // Stream complete
-                    break;
-
-                case 'error':
-                    const errDiv = document.createElement('div');
-                    errDiv.style.cssText = 'color:#ff4d4f;font-size:13px;margin-top:6px;';
-                    errDiv.textContent = '❌ ' + (data.message || '未知错误');
-                    div.appendChild(errDiv);
-                    break;
-
-                default:
-                    addEventLog(div, type);
-                    break;
+        // ---- Flush buffered message/think ----
+        function flushMsgBuffer() {
+            if (msgBuffer.length > 0) {
+                addEventRow('message', msgBufferStartSeq, msgBufferAgent, msgBuffer, false);
+                msgBuffer = '';
+                msgBufferAgent = null;
+                msgBufferStartSeq = null;
             }
         }
 
-        // ---- Utility ----
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        function flushThinkBuffer() {
+            if (thinkBuffer.length > 0) {
+                addEventRow('think', thinkBufferStartSeq, thinkBufferAgent, thinkBuffer, false);
+                thinkBuffer = '';
+                thinkBufferAgent = null;
+                thinkBufferStartSeq = null;
+            }
+        }
+
+        function flushAll() {
+            flushMsgBuffer();
+            flushThinkBuffer();
+        }
+
+        // ---- Handle each RouterEvent ----
+        function handleEvent(frame) {
+            const type = frame.event;
+            const seq = frame.seq;
+            const agentId = frame.agentId || null;
+            const data = frame.data || {};
+
+            switch (type) {
+                // ---- Streaming text: buffer and aggregate ----
+                case 'message': {
+                    const chunk = data.answer || '';
+                    stats.messages++;
+                    if (chunk.length === 0) return;
+
+                    // Agent 切换时先 flush
+                    if (msgBufferAgent !== agentId) flushMsgBuffer();
+
+                    if (!msgBufferStartSeq) msgBufferStartSeq = seq;
+                    msgBufferAgent = agentId;
+                    msgBuffer += chunk;
+
+                    // 达到阈值则 flush
+                    if (msgBuffer.length >= MIN_DISPLAY_LEN) flushMsgBuffer();
+                    return;
+                }
+
+                case 'think': {
+                    const chunk = data.answer || '';
+                    stats.thinks++;
+                    if (chunk.length === 0) return;
+
+                    if (thinkBufferAgent !== agentId) flushThinkBuffer();
+
+                    if (!thinkBufferStartSeq) thinkBufferStartSeq = seq;
+                    thinkBufferAgent = agentId;
+                    thinkBuffer += chunk;
+
+                    if (thinkBuffer.length >= MIN_DISPLAY_LEN) flushThinkBuffer();
+                    return;
+                }
+
+                // ---- Non-streaming events: flush buffers first, then display ----
+                default:
+                    flushAll();
+
+                    let content = '';
+                    let isSep = false;
+
+                    switch (type) {
+                        case 'workflow_started':
+                            content = 'workflow started'; isSep = true; break;
+                        case 'workflow_finished':
+                            content = 'workflow finished'; isSep = true; break;
+                        case 'plan': {
+                            const nodeList = data.nodeList || [];
+                            const finished = data.finished || 0;
+                            const names = nodeList.map(n => n.agentId || n.id || '?').join(' → ');
+                            content = `plan: [${names}] (${finished} done)`; isSep = true; break;
+                        }
+                        case 'node_started':
+                            content = 'node started'; isSep = true; break;
+                        case 'node_finished':
+                            content = 'node finished'; isSep = true; break;
+                        case 'think_time':
+                            content = data.think_time || 'thinking...'; stats.thinks++; break;
+                        case 'message_end':
+                            content = 'stream complete'; isSep = true; break;
+                        case 'error':
+                            content = data.message || 'unknown error'; stats.errors++; break;
+                        default:
+                            content = JSON.stringify(data); break;
+                    }
+
+                    addEventRow(type, seq, agentId, content, isSep);
+                    break;
+            }
         }
 
         // Focus input on load
