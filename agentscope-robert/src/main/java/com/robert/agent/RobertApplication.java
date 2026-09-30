@@ -56,6 +56,8 @@ public class RobertApplication {
         log.info("  agentscope-robert 启动完成");
         log.info("  SSE 流式接口: http://localhost:{}/api/router/stream", port());
         log.info("  MVC 流式接口: http://localhost:{}/api/router/stream2", port());
+        log.info("  Channel SSE 接口: http://localhost:{}/api/channel/chat/stream", port());
+        log.info("  Channel 前端页面: http://localhost:{}/channel.html", port());
         log.info("============================================");
     }
 
