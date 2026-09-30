@@ -22,6 +22,7 @@ public class RouterEvent {
         TABLE,
         ORG,
         DOCUMENT,
+        CUSTOM_DATA,    // SubAgent 自定义结构化数据（业务定制）
         NODE_FINISHED,
         WORKFLOW_FINISHED,
         MESSAGE_END,
@@ -117,6 +118,23 @@ public class RouterEvent {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("documentPayload", documentPayload);
         return withSeq(new RouterEvent(Type.DOCUMENT, module, agentId, p), seq);
+    }
+
+    /**
+     * 创建自定义结构化数据事件。
+     *
+     * <p>用于 SubAgent 层注入业务定制数据（如加工后的 Map 结构），
+     * RouterAgent 透传到前端，不做任何业务解释。</p>
+     *
+     * @param dataName 数据名称/标识（前端据此区分不同业务数据）
+     * @param data     任意 Map 结构的业务数据
+     */
+    public static RouterEvent customData(String dataName, Map<String, Object> data,
+                                         int module, String agentId, long seq) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("dataName", dataName);
+        p.put("data", data);
+        return withSeq(new RouterEvent(Type.CUSTOM_DATA, module, agentId, p), seq);
     }
 
     public static RouterEvent error(String message, long seq) {
