@@ -3,6 +3,7 @@ package com.robert.agent.router;
 import com.robert.agent.router.model.RouterEvent;
 import com.robert.agent.router.model.RouterRequest;
 import com.robert.agent.router.subagent.SubAgent;
+import com.robert.agent.router.subagent.SubAgentContext;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
@@ -130,6 +131,10 @@ public class RouterAgent {
         agg.emitInitialPlan();
 
         // ⑤ 串行调度：逐个消费子 Agent 的流式输出
+        //    创建流转上下文，在 Agent 链路中层层传递
+        SubAgentContext agentCtx = new SubAgentContext();
+        agentCtx.setTotalTargets(targets.size());
+
         for (int i = 0; i < targets.size(); i++) {
             if (request.isCancelled()) {
                 log.info("[router] 用户取消，终止串行调度（已完成 " + i + "/" + targets.size() + "）");
@@ -147,18 +152,29 @@ public class RouterAgent {
 
             SubAgentRequest subReq = buildRequest(request, agentId, i);
 
+            // 更新流转上下文的位置信息
+            agentCtx.setCurrentAgentId(agentId);
+            agentCtx.setCurrentIndex(i);
+
             // 节点开始
             sink.next(RouterEvent.nodeStarted("llm", i, agentId, seqGenerator.incrementAndGet()));
 
-            log.info("[router] 调用子 Agent: " + agentId + " (module=" + i + ")");
+            log.info("[router] 调用子 Agent: " + agentId + " (module=" + i
+                    + ", 位置=" + (i + 1) + "/" + targets.size()
+                    + (agentCtx.hasOutput() ? ", 携带上游文本" : "") + ")");
 
             // 流式消费子 Agent 输出，逐条赋值 seq 并转发到 sink
             try {
-                agent.stream(subReq)
+                agent.stream(subReq, agentCtx)
                         .timeout(Duration.ofSeconds(agentTimeoutSec))
                         .doOnNext(event -> {
                             event.setSeq(seqGenerator.incrementAndGet());
                             sink.next(event);
+                            // 累积文本输出到流转上下文，供下游 Agent 读取
+                            if (event.getType() == RouterEvent.Type.MESSAGE) {
+                                String fragment = (String) event.getPayload().get("answer");
+                                agentCtx.appendOutput(fragment);
+                            }
                         })
                         .blockLast();
 

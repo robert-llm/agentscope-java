@@ -56,17 +56,15 @@ public class HarnessSubAgentAdapter implements SubAgent {
      * <p>返回的 Flux 是冷流，订阅时才启动 HarnessAgent 的事件消费。
      * 每个 AgentEvent 被转换为 RouterEvent（seq=0，由 RouterAgent 统一赋值）。</p>
      *
-     * <p>定制化处理点：
-     * <ul>
-     *   <li>{@link #enrichWithCustomData(int)} — 在 Agent 启动后注入业务 Map 数据</li>
-     *   <li>{@link #appendSummary(int)} — 在流末尾追加定制文本摘要</li>
-     *   <li>{@link #toRouterEvent(AgentEvent, int)} — 逐事件转换，可按需扩展更多类型</li>
-     * </ul>
-     * </p>
+     * @param req     子 Agent 请求
+     * @param context 流转上下文（包含上游 Agent 的中间数据）
      */
     @Override
-    public Flux<RouterEvent> stream(SubAgentRequest req) {
+    public Flux<RouterEvent> stream(SubAgentRequest req, SubAgentContext context) {
         int module = req.getModule();
+
+        // 构建增强后的问题：融合上游上下文
+        String enhancedQuestion = buildEnhancedQuestion(req, context);
 
         RuntimeContext ctx = RuntimeContext.builder()
                 .sessionId("sub-" + req.getContext().getMessageId())
@@ -74,7 +72,7 @@ public class HarnessSubAgentAdapter implements SubAgent {
                 .build();
 
         return harnessAgent.streamEvents(
-                        List.of(new UserMessage(req.getQuestion())),
+                        List.of(new UserMessage(enhancedQuestion)),
                         ctx
                 )
                 // 1) 逐事件转换：AgentEvent → RouterEvent
@@ -109,6 +107,42 @@ public class HarnessSubAgentAdapter implements SubAgent {
     }
 
     // ==================== 业务定制点 ====================
+
+    /**
+     * 构建增强后的问题文本，融合上游 SubAgentContext 中的中间数据。
+     *
+     * <p>当存在上游数据时，将上一个 Agent 的文本输出和结构化数据
+     * 作为参考上下文追加到原始问题后面，让当前 Agent 能够基于
+     * 上游的处理结果做进一步加工。</p>
+     *
+     * <p>SubAgent 也可以直接通过 {@code context.get("key")} 读取上游数据
+     * 做业务逻辑判断，而不仅仅依赖 prompt 拼接。</p>
+     */
+    private String buildEnhancedQuestion(SubAgentRequest req, SubAgentContext context) {
+        StringBuilder sb = new StringBuilder(req.getQuestion());
+
+        // 拼接上游文本输出
+        if (context.hasOutput()) {
+            sb.append("\n\n### 上一个 Agent 的处理结果 ###\n");
+            sb.append(context.getOutput());
+        }
+
+        // 拼接上游结构化数据
+        Map<String, Object> upstreamData = context.getAllData();
+        if (!upstreamData.isEmpty()) {
+            sb.append("\n\n### 上一个 Agent 的结构化数据 ###\n");
+            upstreamData.forEach((key, value) -> {
+                sb.append("【").append(key).append("】\n");
+                if (value instanceof Map<?, ?> map) {
+                    map.forEach((k, v) -> sb.append("  ").append(k).append(": ").append(v).append("\n"));
+                } else {
+                    sb.append("  ").append(value).append("\n");
+                }
+            });
+        }
+
+        return sb.toString();
+    }
 
     /**
      * 在事件流中注入自定义 Map 数据。

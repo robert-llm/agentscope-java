@@ -53,11 +53,12 @@ public class SimpleChatSubAgent implements SubAgent {
      * </ol></p>
      */
     @Override
-    public Flux<RouterEvent> stream(SubAgentRequest req) {
+    public Flux<RouterEvent> stream(SubAgentRequest req, SubAgentContext context) {
         String question = req.getQuestion();
         int module = req.getModule();
 
-        log.info("[SimpleChatSubAgent] 收到问题: " + question);
+        log.info("[SimpleChatSubAgent] 收到问题: " + question
+                + (context.hasOutput() ? ", 上游文本长度=" + context.getOutput().length() : ""));
 
         // 构造回复文本
         String reply = "你好，我是测试 Agent「" + agentId + "」。"
