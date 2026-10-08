@@ -65,7 +65,7 @@ public class A2aServerConfig {
     public AgentRegistry agentRegistry() {
         // 设置 Nacos 地址
         Properties properties = new Properties();
-        properties.put(PropertyKeyConst.SERVER_ADDR, "10.36.21.120:8848");
+        properties.put(PropertyKeyConst.SERVER_ADDR, "localhost:8848");
 // 创建 Nacos Client
         AiService aiService = null;
         try {
