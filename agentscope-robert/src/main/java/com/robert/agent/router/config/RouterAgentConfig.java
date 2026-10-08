@@ -1,6 +1,6 @@
 package com.robert.agent.router.config;
 
-import com.robert.agent.router.AgentRegistry;
+import com.robert.agent.router.RouterAgentRegistry;
 //import com.robert.agent.EIPSubAgent;
 import com.robert.agent.router.RouterAgent;
 import com.robert.agent.router.subagent.HarnessSubAgentAdapter;
@@ -35,8 +35,8 @@ public class RouterAgentConfig {
 //    public AgentRegistry agentRegistry(ReActSmartAgent reActSmartAgent,
 //                                       ExecutorService agentExecutor) {
     @Bean
-    public AgentRegistry agentRegistry(ExecutorService agentExecutor) {
-        AgentRegistry registry = new AgentRegistry();
+    public RouterAgentRegistry routerAgentRegistry(ExecutorService agentExecutor) {
+        RouterAgentRegistry registry = new RouterAgentRegistry();
 //        registry.register(new EIPSubAgent(reActSmartAgent, agentExecutor));
         // registry.register(new LearningSubAgent(...));
 
@@ -96,8 +96,8 @@ public class RouterAgentConfig {
 
     @Bean
     public RouterAgent routerAgent(ReActAgent routerReActAgent,
-                                   AgentRegistry agentRegistry,
+                                   RouterAgentRegistry routerAgentRegistry,
                                    ExecutorService agentExecutor) {
-        return new RouterAgent(routerReActAgent, agentRegistry, agentExecutor, 90);
+        return new RouterAgent(routerReActAgent, routerAgentRegistry, agentExecutor, 90);
     }
 }

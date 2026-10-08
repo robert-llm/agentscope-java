@@ -39,10 +39,16 @@ import org.springframework.context.annotation.FilterType;
 @SpringBootApplication
 @ComponentScan(
         basePackages = "com.robert.agent",
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.REGEX,
-                pattern = "com\\.robert\\.agent\\.exampleagent\\..*"
-        )
+        excludeFilters = {
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = "com\\.robert\\.agent\\.exampleagent\\..*"
+                ),
+//                @ComponentScan.Filter(
+//                        type = FilterType.REGEX,
+//                        pattern = "com\\.robert\\.agent\\.a2a\\..*"
+//                )
+        }
 )
 public class RobertApplication {
 

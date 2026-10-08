@@ -20,7 +20,7 @@ public class StreamAggregator {
     private final Consumer<RouterEvent> eventConsumer;
     private final AtomicLong seqGenerator;
     private final List<String> targets;
-    private final AgentRegistry registry;
+    private final RouterAgentRegistry registry;
 
     /** 已完成的子 Agent 集合（用于 plan 节点状态追踪） */
     private final Set<String> completedAgents = new LinkedHashSet<>();
@@ -29,7 +29,7 @@ public class StreamAggregator {
     public StreamAggregator(Consumer<RouterEvent> eventConsumer,
                             AtomicLong seqGenerator,
                             List<String> targets,
-                            AgentRegistry registry) {
+                            RouterAgentRegistry registry) {
         this.eventConsumer = eventConsumer;
         this.seqGenerator = seqGenerator;
         this.targets = targets;

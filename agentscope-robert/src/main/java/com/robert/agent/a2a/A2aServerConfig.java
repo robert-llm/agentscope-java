@@ -1,10 +1,18 @@
 package com.robert.agent.a2a;
 
+import com.alibaba.nacos.api.PropertyKeyConst;
+import com.alibaba.nacos.api.ai.AiFactory;
+import com.alibaba.nacos.api.ai.AiService;
+import com.alibaba.nacos.api.exception.NacosException;
 import io.agentscope.core.ReActAgent;
+import io.agentscope.core.a2a.server.registry.AgentRegistry;
+import io.agentscope.core.nacos.a2a.registry.NacosAgentRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Properties;
 
 /**
  * A2A 服务端配置。
@@ -51,5 +59,21 @@ public class A2aServerConfig {
 
                         请用中文回答用户的问题。
                         """);
+    }
+
+    @Bean
+    public AgentRegistry agentRegistry() {
+        // 设置 Nacos 地址
+        Properties properties = new Properties();
+        properties.put(PropertyKeyConst.SERVER_ADDR, "10.36.21.120:8848");
+// 创建 Nacos Client
+        AiService aiService = null;
+        try {
+            aiService = AiFactory.createAiService(properties);
+        }catch (NacosException e){
+            log.error("nacos注册器创建失败");
+        }
+        // 可以在这里设置 namespace 等其他属性
+        return NacosAgentRegistry.builder(aiService).build();
     }
 }

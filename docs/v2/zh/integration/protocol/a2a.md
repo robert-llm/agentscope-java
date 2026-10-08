@@ -100,7 +100,7 @@ server.postEndpointReady();   // Web 服务监听端口后再调用，触发注�
 
 - `TaskStore` / `QueueManager`：任务和事件队列存储，默认是内存实现，生产可换成持久化版本。
 - `PushNotificationConfigStore` / `PushNotificationSender`：推送通知。
-- `AgentRegistry`：把 `AgentCard` 注册到外部注册中心（如 Nacos，见 [Nacos](../infrastructure/nacos.md)）。
+- `RouterAgentRegistry`：把 `AgentCard` 注册到外部注册中心（如 Nacos，见 [Nacos](../infrastructure/nacos.md)）。
 
 ## Spring Boot Starter
 

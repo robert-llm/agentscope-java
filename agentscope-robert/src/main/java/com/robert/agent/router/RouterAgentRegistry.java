@@ -4,7 +4,7 @@ import com.robert.agent.router.subagent.SubAgent;
 
 import java.util.*;
 
-public class AgentRegistry {
+public class RouterAgentRegistry {
     private final Map<String, SubAgent> agents = new LinkedHashMap<>();
 
     public void register(SubAgent agent) {

@@ -37,13 +37,13 @@ public class RouterAgent {
     private static final Logger log = Logger.getLogger(RouterAgent.class.getName());
 
     private final ReActAgent planningModel;
-    private final AgentRegistry registry;
+    private final RouterAgentRegistry registry;
     private final ExecutorService agentExecutor;
     private final int agentTimeoutSec;
     private final AtomicLong seqGenerator = new AtomicLong(0);
 
     public RouterAgent(ReActAgent planningModel,
-                       AgentRegistry registry,
+                       RouterAgentRegistry registry,
                        ExecutorService agentExecutor,
                        int agentTimeoutSec) {
         this.planningModel = planningModel;

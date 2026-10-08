@@ -100,7 +100,7 @@ server.postEndpointReady();   // call after the web server is listening — trig
 
 - `TaskStore` / `QueueManager`: task and event queue stores; in-memory by default, swap for persistent versions in production.
 - `PushNotificationConfigStore` / `PushNotificationSender`: outbound notifications.
-- `AgentRegistry`: register `AgentCard` to an external registry such as Nacos (see [Nacos](../infrastructure/nacos.md)).
+- `RouterAgentRegistry`: register `AgentCard` to an external registry such as Nacos (see [Nacos](../infrastructure/nacos.md)).
 
 ## Spring Boot Starter
 
