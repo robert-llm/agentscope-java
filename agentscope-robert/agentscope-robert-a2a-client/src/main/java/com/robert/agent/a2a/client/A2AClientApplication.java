@@ -46,7 +46,7 @@ public class A2AClientApplication {
     public static void main(String[] args) {
         SpringApplication.run(A2AClientApplication.class, args);
         log.info("============================================");
-        log.info("A2A server Application 启动");
+        log.info("A2A client Application 启动");
         log.info("============================================");
     }
 }

@@ -37,7 +37,7 @@ import org.springframework.context.annotation.ComponentScan;
  */
 @SpringBootApplication
 @ComponentScan(
-        basePackages = "com.robert.agent.a2a"
+        basePackages = "com.robert.agent.a2a.server"
 )
 public class A2AServerApplication {
 
