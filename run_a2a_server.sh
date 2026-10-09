@@ -6,7 +6,7 @@ export JAVA_HOME="/d/software/jdk-17.0.12"
 export PATH=$JAVA_HOME/bin:$PATH
 
 #mvn -pl agentscope-robert clean spring-boot:run -X
-mvn -pl agentscope-robert clean spring-boot:run  -Dspring-boot.run.main-class=com.robert.agent.RobertApplication 
+mvn -pl agentscope-robert clean spring-boot:run  -Dspring-boot.run.main-class=com.robert.agent.A2AServerApplication -X
 
 
 

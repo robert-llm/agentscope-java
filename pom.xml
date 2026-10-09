@@ -62,6 +62,8 @@
         <module>agentscope-dependencies-bom</module>
         <module>agentscope-distribution</module>
         <module>agentscope-robert</module>
+        <module>agentscope-robert/agentscope-robert-a2a-server</module>
+        <module>agentscope-robert/agentscope-robert-a2a-client</module>
     </modules>
 
     <description>AgentScope Java: Agent-Oriented Programming for Building LLM Applications</description>

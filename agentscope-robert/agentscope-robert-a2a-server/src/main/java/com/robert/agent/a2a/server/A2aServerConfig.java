@@ -1,4 +1,4 @@
-package com.robert.agent.a2a;
+package com.robert.agent.a2a.server;
 
 import com.alibaba.nacos.api.PropertyKeyConst;
 import com.alibaba.nacos.api.ai.AiFactory;

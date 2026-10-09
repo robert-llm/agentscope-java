@@ -1,11 +1,10 @@
-package com.robert.agent;
+package com.robert.agent.a2a.server;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
 
 /**
  * agentscope-robert 模块 Spring Boot 启动类。
@@ -38,35 +37,16 @@ import org.springframework.context.annotation.FilterType;
  */
 @SpringBootApplication
 @ComponentScan(
-        basePackages = "com.robert.agent",
-        excludeFilters = {
-                @ComponentScan.Filter(
-                        type = FilterType.REGEX,
-                        pattern = "com\\.robert\\.agent\\.exampleagent\\..*"
-                )
-//                @ComponentScan.Filter(
-//                        type = FilterType.REGEX,
-//                        pattern = "com\\.robert\\.agent\\.a2a\\..*"
-//                )
-        }
+        basePackages = "com.robert.agent.a2a"
 )
-public class RobertApplication {
+public class A2AServerApplication {
 
-    private static final Logger log = LoggerFactory.getLogger(RobertApplication.class);
+    private static final Logger log = LoggerFactory.getLogger(A2AServerApplication.class);
 
     public static void main(String[] args) {
-        SpringApplication.run(RobertApplication.class, args);
+        SpringApplication.run(A2AServerApplication.class, args);
         log.info("============================================");
-        log.info("  agentscope-robert 启动完成");
-        log.info("  SSE 流式接口: http://localhost:{}/api/router/stream", port());
-        log.info("  MVC 流式接口: http://localhost:{}/api/router/stream2", port());
-        log.info("  Channel SSE 接口: http://localhost:{}/api/channel/chat/stream", port());
-        log.info("  Channel 前端页面: http://localhost:{}/channel.html", port());
+        log.info("A2A server Application 启动");
         log.info("============================================");
-    }
-
-    private static String port() {
-        String p = System.getenv("SERVER_PORT");
-        return (p != null && !p.isBlank()) ? p : "18096";
     }
 }
