@@ -2,7 +2,6 @@ package com.robert.agent.a2a.client;
 
 import io.agentscope.core.a2a.agent.A2aAgent;
 import io.agentscope.core.a2a.agent.card.AgentCardResolver;
-import io.agentscope.core.agent.Event;
 import io.agentscope.core.message.Msg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,18 +82,26 @@ public class RemoteAgentProxy {
     }
 
     /**
-     * 流式调用远程 Agent。
+     * 流式调用远程 Agent（模拟）— 通过 call() 获取最终结果后以 Flux 返回。
+     *
+     * <p>由于 A2aAgent 不支持真正的流式 API（stream() 已废弃），这里通过 call() 获取最终结果，
+     * 然后包装为 Flux 返回，方便 Controller 层统一处理。</p>
      *
      * @param agentName 远程 Agent 名称
      * @param message   用户消息文本
-     * @return 事件流
+     * @return 包含最终结果的事件流
      */
-    public Flux<Event> stream(String agentName, String message) {
+    public Flux<Msg> stream(String agentName, String message) {
         A2aAgent agent = getOrCreateAgent(agentName);
         Msg userMsg = Msg.builder().textContent(message).build();
         log.info("[A2A Client] 流式调用远程 Agent: {}", agentName);
-        return agent.stream(userMsg).doOnNext(event -> {
-            log.info("[A2A Client] 远程 Agent {} 返回事件: {}", agentName, event.getType());
+
+        return Flux.defer(() -> {
+            Msg result = agent.call(userMsg).block();
+            if (result != null) {
+                return Flux.just(result);
+            }
+            return Flux.empty();
         });
     }
 

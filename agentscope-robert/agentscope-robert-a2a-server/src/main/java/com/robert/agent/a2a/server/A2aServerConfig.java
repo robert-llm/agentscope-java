@@ -51,6 +51,7 @@ public class A2aServerConfig {
         log.info("[A2A Server] 注册 ReActAgent.Builder，agent 名称: doctor-assistant");
         return ReActAgent.builder()
                 .name("doctor-assistant")
+                .model("qwen-plus")
                 .sysPrompt("""
                         你是一个医生智能助手, 你的职责包括：
                         1. 理解用户的疾病症状描述

@@ -85,7 +85,7 @@ public class A2aController {
     /**
      * 流式调用远程 Agent（SSE）。
      *
-     * <p>通过 SSE 实时推送远程 Agent 的处理事件。</p>
+     * <p>通过 SSE 实时推送远程 Agent 的处理结果。</p>
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamRemoteAgent(
@@ -95,10 +95,10 @@ public class A2aController {
         log.info("[A2A] 流式调用远程 Agent: {}, 消息: {}", agentName, message);
 
         return remoteAgentProxy.stream(agentName, message)
-                .map(event -> {
+                .map(msg -> {
                     Map<String, Object> frame = new LinkedHashMap<>();
-                    frame.put("type", event.getClass().getSimpleName());
-                    frame.put("event", event.toString());
+                    frame.put("type", "AGENT_RESULT");
+                    frame.put("content", msg.getTextContent());
                     return "data: " + toJson(frame) + "\n\n";
                 })
                 .concatWith(Flux.just("data: {\"type\":\"DONE\"}\n\n"));
