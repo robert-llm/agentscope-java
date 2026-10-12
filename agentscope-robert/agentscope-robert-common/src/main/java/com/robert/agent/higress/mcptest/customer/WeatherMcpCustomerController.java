@@ -35,7 +35,7 @@ public class WeatherMcpCustomerController {
     @Operation(summary = "聊天测试", description = "查询指定城市的天气信息")
     public Map<String, String> getWeatherByPath(
             @Parameter(description = "聊天内容", required = true)
-            @PathVariable("message") String message) {
+            @RequestParam("message") String message) {
         Msg response = weatherAgent.call(message).block();
         String text = response.getTextContent();
         return Map.of(
