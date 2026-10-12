@@ -1,11 +1,11 @@
 package com.robert.agent.higress.mcptest.customer.config;
 
-import com.alibaba.fastjson.JSON;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.HookEvent;
 import io.agentscope.core.hook.PostActingEvent;
 import io.agentscope.core.hook.PreActingEvent;
+import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.permission.PermissionContextState;
@@ -94,8 +94,17 @@ public class AgentScopeConfig {
                 } else if (event instanceof PostActingEvent e) {
                     ToolUseBlock toolUse = e.getToolUse();
                     ToolResultBlock result = e.getToolResult();
-                    log.info("<<< [ToolCall] 工具返回: {} | 结果: {}",
-                            toolUse.getName(), JSON.toJSONString(result.getOutput())   );
+
+                    // 从 ToolResultBlock 的 output 中提取纯 JSON
+                    String rawText = result.getOutput().stream()
+                            .filter(block -> block instanceof TextBlock)
+                            .map(block -> ((TextBlock) block).getText())
+                            .findFirst()
+                            .orElse("");
+
+                    String pureJson = extractJson(rawText);
+                    log.info("<<< [ToolCall] 工具返回: {} | 纯JSON: {}",
+                            toolUse.getName(), pureJson);
                 }
                 return Mono.just(event);
             }
@@ -116,5 +125,52 @@ public class AgentScopeConfig {
                 .build();
         log.info("WeatherAgent 创建完成，已绑定 Higress MCP 工具");
         return agent;
+    }
+
+    /**
+     * 从 Higress 网关返回的包装文本中提取纯 JSON。
+     * Higress 会在工具响应外包裹 "# API Response Information" 等说明文本，
+     * 实际 JSON 位于 "## Original Response" 标记之后。
+     * 如果没有找到标记，则尝试直接提取文本中的第一个 JSON 对象/数组。
+     */
+    private static String extractJson(String rawText) {
+        if (rawText == null || rawText.isBlank()) {
+            return "";
+        }
+
+        // 方式1：查找 "## Original Response" 标记
+        String marker = "## Original Response";
+        int idx = rawText.indexOf(marker);
+        if (idx >= 0) {
+            String afterMarker = rawText.substring(idx + marker.length()).trim();
+            if (!afterMarker.isEmpty()) {
+                return afterMarker;
+            }
+        }
+
+        // 方式2：回退，直接找第一个 { 或 [ 开始的 JSON
+        int braceStart = rawText.indexOf('{');
+        int bracketStart = rawText.indexOf('[');
+        int start = -1;
+        if (braceStart >= 0 && bracketStart >= 0) {
+            start = Math.min(braceStart, bracketStart);
+        } else if (braceStart >= 0) {
+            start = braceStart;
+        } else if (bracketStart >= 0) {
+            start = bracketStart;
+        }
+
+        if (start >= 0) {
+            int end = rawText.lastIndexOf('}');
+            if (end < 0) {
+                end = rawText.lastIndexOf(']');
+            }
+            if (end > start) {
+                return rawText.substring(start, end + 1);
+            }
+        }
+
+        // 都没找到，返回原始文本
+        return rawText;
     }
 }
