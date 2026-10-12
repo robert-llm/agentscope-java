@@ -64,6 +64,7 @@
         <module>agentscope-robert</module>
         <module>agentscope-robert/agentscope-robert-a2a-server</module>
         <module>agentscope-robert/agentscope-robert-a2a-client</module>
+        <module>agentscope-robert/agentscope-robert-common</module>
     </modules>
 
     <description>AgentScope Java: Agent-Oriented Programming for Building LLM Applications</description>
