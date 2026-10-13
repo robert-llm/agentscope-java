@@ -10,4 +10,5 @@ import org.springframework.stereotype.Component;
 public class HigressProperties {
     private String mcpEndpoint;
     private String clientName = "higress";
+    private String clientKeyAuth;
 }

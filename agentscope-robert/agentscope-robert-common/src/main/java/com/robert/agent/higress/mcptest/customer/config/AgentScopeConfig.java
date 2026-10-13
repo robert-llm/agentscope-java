@@ -23,6 +23,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import reactor.core.publisher.Mono;
 
+import java.util.Set;
+
 @Configuration
 @RequiredArgsConstructor
 public class AgentScopeConfig {
@@ -35,13 +37,16 @@ public class AgentScopeConfig {
      * 创建 Higress MCP 客户端，连接网关上发布的 MCP 端点
      * 这一步只做连接，不注册工具
      */
-    @Lazy
+    //@Lazy
     @Bean
     public HigressMcpClientWrapper higressMcpClient() {
         log.info("正在创建 Higress MCP 客户端，端点: {}", higressProperties.getMcpEndpoint());
+        log.info("client -name {}", higressProperties.getClientName());
         return HigressMcpClientBuilder
                 .create(higressProperties.getClientName())
                 .streamableHttpEndpoint(higressProperties.getMcpEndpoint())
+                .header("Authorization", "Bearer " + higressProperties.getClientKeyAuth())
+//                .header("token", higressProperties.getClientKeyAuth())
                 .buildSync();
     }
 
@@ -83,16 +88,25 @@ public class AgentScopeConfig {
         higressToolkit.getToolSchemas().forEach(ts ->
                 log.info("  - 工具: {} ({})", ts.getName(), ts.getDescription()));
 
+        // 只拦截指定工具的日志（留空则拦截所有工具）
+        Set<String> watchedTools = Set.of("getWeather");
+
         // 工具调用日志拦截 Hook：在每次工具调用前后打印日志
         Hook toolLoggingHook = new Hook() {
             @Override
             public <T extends HookEvent> Mono<T> onEvent(T event) {
                 if (event instanceof PreActingEvent e) {
                     ToolUseBlock toolUse = e.getToolUse();
+                    if (!watchedTools.isEmpty() && !watchedTools.contains(toolUse.getName())) {
+                        return Mono.just(event);
+                    }
                     log.info(">>> [ToolCall] 调用工具: {} | 参数: {}",
                             toolUse.getName(), toolUse.getInput());
                 } else if (event instanceof PostActingEvent e) {
                     ToolUseBlock toolUse = e.getToolUse();
+                    if (!watchedTools.isEmpty() && !watchedTools.contains(toolUse.getName())) {
+                        return Mono.just(event);
+                    }
                     ToolResultBlock result = e.getToolResult();
 
                     // 从 ToolResultBlock 的 output 中提取纯 JSON
