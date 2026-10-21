@@ -13,6 +13,7 @@ import org.springframework.context.annotation.ComponentScan;
 @ComponentScan(
         basePackages = {
                 "com.robert.agent.higress.mcptest.provider",
+                "com.robert.agent.higress.mcptest.service",
                 "io.agentscope"
         }
 )

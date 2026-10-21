@@ -6,9 +6,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/mcp/api/weather")
@@ -21,6 +27,8 @@ import java.time.LocalDateTime;
  **/
 public class WeatherMcpProviderController {
     private static final Logger log = LoggerFactory.getLogger(WeatherMcpProviderController.class);
+
+    // ==================== 天气查询接口 ====================
 
     @GetMapping
     @Operation(summary = "按城市名查询天气", description = "通过 query 参数 city 查询指定城市的天气信息")
@@ -38,6 +46,162 @@ public class WeatherMcpProviderController {
             @PathVariable("city") String city) {
         log.info("Received request for weather in city: {}", city);
         return mockWeather(city);
+    }
+
+
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "流式查询天气", description = "通过 Server-Sent Events 流式返回指定城市的天气信息")
+    public Flux<ServerSentEvent<String>> streamWeatherByPath(
+            @Parameter(description = "城市名称，如：北京、上海", required = true)
+            @RequestParam("city") String city) {
+        log.info("Received streaming request for weather in city: {}", city);
+
+        return Flux.concat(
+                // 1. 发送开始事件
+                createSseEvent("start", Map.of(
+                        "status", "querying",
+                        "city", city,
+                        "timestamp", LocalDateTime.now().toString()
+                )),
+
+                // 2. 延迟后发送城市信息
+                Mono.delay(Duration.ofMillis(300))
+                        .flatMap(delay -> createSseEvent("city_info", Map.of(
+                                "city", city,
+                                "queryTime", LocalDateTime.now().toString()
+                        ))),
+
+                // 3. 延迟后发送天气状况
+                Mono.delay(Duration.ofMillis(600))
+                        .flatMap(delay -> createSseEvent("weather", Map.of(
+                                "weather", mockWeather(city).weather(),
+                                "description", getWeatherDescription(mockWeather(city).weather())
+                        ))),
+
+                // 4. 延迟后发送温度信息
+                Mono.delay(Duration.ofMillis(900))
+                        .flatMap(delay -> createSseEvent("temperature", Map.of(
+                                "temperature", mockWeather(city).temperature(),
+                                "unit", "摄氏度"
+                        ))),
+
+                // 5. 延迟后发送湿度信息
+                Mono.delay(Duration.ofMillis(1200))
+                        .flatMap(delay -> createSseEvent("humidity", Map.of(
+                                "humidity", mockWeather(city).humidity(),
+                                "unit", "%"
+                        ))),
+
+                // 6. 延迟后发送风力信息
+                Mono.delay(Duration.ofMillis(1500))
+                        .flatMap(delay -> createSseEvent("wind", Map.of(
+                                "wind", mockWeather(city).wind()
+                        ))),
+
+                // 7. 延迟后发送完整数据
+                Mono.delay(Duration.ofMillis(1800))
+                        .flatMap(delay -> createSseEvent("complete", mockWeather(city))),
+
+                // 8. 发送结束事件
+                Mono.delay(Duration.ofMillis(2000))
+                        .flatMap(delay -> createSseEvent("done", Map.of(
+                                "status", "completed",
+                                "timestamp", LocalDateTime.now().toString()
+                        )))
+        );
+    }
+
+    @GetMapping(value = "/stream/{city}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "流式查询天气", description = "通过 Server-Sent Events 流式返回指定城市的天气信息")
+    public Flux<ServerSentEvent<String>> streamWeather(
+            @Parameter(description = "城市名称，如：北京、上海", required = true)
+            @PathVariable("city") String city) {
+        log.info("Received streaming request for weather in city: {}", city);
+
+        return Flux.concat(
+                // 1. 发送开始事件
+                createSseEvent("start", Map.of(
+                        "status", "querying",
+                        "city", city,
+                        "timestamp", LocalDateTime.now().toString()
+                )),
+
+                // 2. 延迟后发送城市信息
+                Mono.delay(Duration.ofMillis(300))
+                        .flatMap(delay -> createSseEvent("city_info", Map.of(
+                                "city", city,
+                                "queryTime", LocalDateTime.now().toString()
+                        ))),
+
+                // 3. 延迟后发送天气状况
+                Mono.delay(Duration.ofMillis(600))
+                        .flatMap(delay -> createSseEvent("weather", Map.of(
+                                "weather", mockWeather(city).weather(),
+                                "description", getWeatherDescription(mockWeather(city).weather())
+                        ))),
+
+                // 4. 延迟后发送温度信息
+                Mono.delay(Duration.ofMillis(900))
+                        .flatMap(delay -> createSseEvent("temperature", Map.of(
+                                "temperature", mockWeather(city).temperature(),
+                                "unit", "摄氏度"
+                        ))),
+
+                // 5. 延迟后发送湿度信息
+                Mono.delay(Duration.ofMillis(1200))
+                        .flatMap(delay -> createSseEvent("humidity", Map.of(
+                                "humidity", mockWeather(city).humidity(),
+                                "unit", "%"
+                        ))),
+
+                // 6. 延迟后发送风力信息
+                Mono.delay(Duration.ofMillis(1500))
+                        .flatMap(delay -> createSseEvent("wind", Map.of(
+                                "wind", mockWeather(city).wind()
+                        ))),
+
+                // 7. 延迟后发送完整数据
+                Mono.delay(Duration.ofMillis(1800))
+                        .flatMap(delay -> createSseEvent("complete", mockWeather(city))),
+
+                // 8. 发送结束事件
+                Mono.delay(Duration.ofMillis(2000))
+                        .flatMap(delay -> createSseEvent("done", Map.of(
+                                "status", "completed",
+                                "timestamp", LocalDateTime.now().toString()
+                        )))
+        );
+    }
+
+    private Mono<ServerSentEvent<String>> createSseEvent(String eventName, Object data) {
+        try {
+            String jsonData = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(data);
+            return Mono.just(
+                    ServerSentEvent.<String>builder()
+                            .event(eventName)
+                            .data(jsonData)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("Failed to serialize SSE event: {}", eventName, e);
+            return Mono.just(
+                    ServerSentEvent.<String>builder()
+                            .event("error")
+                            .data("{\"message\":\"序列化失败\"}")
+                            .build()
+            );
+        }
+    }
+
+    private String getWeatherDescription(String weather) {
+        return switch (weather) {
+            case "晴" -> "天气晴朗，适合户外活动";
+            case "多云" -> "云层较多，阳光时隐时现";
+            case "小雨" -> "有轻微降雨，记得携带雨具";
+            case "阴" -> "天空阴沉，光线较暗";
+            default -> "天气情况一般";
+        };
     }
 
     private WeatherResponse mockWeather(String city) {
