@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>OAuth2 授权流程测试</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                padding: 40px; max-width: 640px; width: 90%; }
+        h1 { font-size: 22px; margin-bottom: 8px; color: #1a1a1a; }
+        .subtitle { color: #666; font-size: 14px; margin-bottom: 28px; }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; font-weight: 500; }
+        .field input { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px;
+                       font-size: 14px; font-family: 'Consolas', monospace; }
+        .field input:focus { outline: none; border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.1); }
+        .btn { display: inline-block; padding: 10px 32px; border: none; border-radius: 6px;
+               font-size: 15px; cursor: pointer; text-decoration: none; color: #fff; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #1677ff; }
+        .tip { margin-top: 20px; padding: 12px 16px; background: #f6f8fa; border-radius: 8px;
+               font-size: 13px; color: #555; line-height: 1.8; }
+        .tip code { background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-family: 'Consolas', monospace; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>OAuth2 授权码流程测试</h1>
+    <p class="subtitle">配置参数后点击「发起授权」，将在新窗口打开授权页面</p>
+
+    <div class="field">
+        <label>授权端点</label>
+        <input id="authBase" value="http://localhost:18099/mcp/api/auth/authorize">
+    </div>
+    <div class="field">
+        <label>client_id</label>
+        <input id="clientId" value="workbuddy_robert">
+    </div>
+    <div class="field">
+        <label>redirect_uri（回调地址）</label>
+        <input id="redirectUri" value="http://localhost:18099/oauth2-callback.html">
+    </div>
+    <div class="field">
+        <label>scope</label>
+        <input id="scope" value="read">
+    </div>
+    <div class="field">
+        <label>state（防 CSRF 随机串）</label>
+        <input id="state" value="">
+    </div>
+
+    <a class="btn btn-primary" onclick="startAuth()" style="cursor:pointer">发起授权</a>
+
+    <div class="tip">
+        <strong>流程说明：</strong><br>
+        1. 点击「发起授权」→ 跳转至授权确认页<br>
+        2. 点击「同意授权」→ 重定向到 <code>redirect_uri?code=xxx&amp;state=xxx</code><br>
+        3. 回调页面可点击「换取 Token」→ 用授权码换取 access_token + refresh_token
+    </div>
+</div>
+<script>
+    // 初始化 state 随机值
+    document.getElementById('state').value = 'test_' + Math.random().toString(36).substring(2, 15);
+
+    function startAuth() {
+        const base = document.getElementById('authBase').value;
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: document.getElementById('clientId').value,
+            redirect_uri: document.getElementById('redirectUri').value,
+            scope: document.getElementById('scope').value,
+            state: document.getElementById('state').value
+        });
+        window.open(base + '?' + params.toString(), '_blank');
+    }
+</script>
+</body>
+</html>

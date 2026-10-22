@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>OAuth2 回调 - 授权结果</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                padding: 40px; max-width: 700px; width: 90%; }
+        h1 { font-size: 22px; margin-bottom: 6px; }
+        .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
+        .success { color: #16a34a; }
+        .error { color: #dc2626; }
+        .info-row { display: flex; margin-bottom: 12px; }
+        .info-label { width: 80px; font-size: 13px; color: #888; flex-shrink: 0; padding-top: 6px; }
+        .info-value { flex: 1; }
+        .info-value input { width: 100%; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px;
+                            font-family: 'Consolas', monospace; font-size: 13px; color: #333; background: #fafafa; }
+        .section { margin-top: 28px; padding-top: 20px; border-top: 1px solid #f0f0f0; }
+        .section h2 { font-size: 16px; margin-bottom: 12px; color: #333; }
+        .field { margin-bottom: 12px; }
+        .field label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+        .field input { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px;
+                       font-size: 14px; font-family: 'Consolas', monospace; }
+        .btn { display: inline-block; padding: 10px 28px; border: none; border-radius: 6px;
+               font-size: 14px; cursor: pointer; color: #fff; transition: opacity 0.2s; margin-right: 8px;
+               text-decoration: none; }
+        .btn:hover { opacity: 0.85; }
+        .btn-success { background: #16a34a; }
+        .btn-primary { background: #1677ff; }
+        .btn-secondary { background: #6b7280; }
+        .result-box { margin-top: 16px; padding: 16px; background: #f6f8fa; border-radius: 8px;
+                      font-family: 'Consolas', monospace; font-size: 13px; white-space: pre-wrap;
+                      word-break: break-all; color: #333; max-height: 300px; overflow-y: auto; display: none; }
+        .result-box.show { display: block; }
+        #errorSection { display: none; }
+        #successSection { display: none; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <!-- 成功区域 -->
+    <div id="successSection">
+        <h1 class="success">&#10003; 授权成功</h1>
+        <p class="subtitle">已收到授权码，可用于换取 Access Token</p>
+
+        <div class="info-row">
+            <span class="info-label">code</span>
+            <div class="info-value"><input id="authCode" value="" readonly></div>
+        </div>
+        <div class="info-row">
+            <span class="info-label">state</span>
+            <div class="info-value"><input id="stateVal" value="" readonly></div>
+        </div>
+
+        <div class="section">
+            <h2>换取 Token</h2>
+            <div class="field">
+                <label>Token 端点</label>
+                <input id="tokenUrl" value="http://localhost:18099/mcp/api/auth/token">
+            </div>
+            <div class="field">
+                <label>client_id</label>
+                <input id="clientId" value="workbuddy_robert">
+            </div>
+            <div class="field">
+                <label>client_secret</label>
+                <input id="clientSecret" value="test_secret" type="password">
+            </div>
+            <div class="field">
+                <label>redirect_uri（需与授权时一致）</label>
+                <input id="redirectUri" value="http://localhost:18099/oauth2-callback.html">
+            </div>
+            <br>
+            <button class="btn btn-success" onclick="exchangeToken()">换取 Token</button>
+            <button class="btn btn-secondary" onclick="copyCode()">复制授权码</button>
+        </div>
+
+        <div id="tokenResult" class="result-box"></div>
+
+        <div class="section" id="refreshSection" style="display:none">
+            <h2>刷新 Token</h2>
+            <button class="btn btn-primary" onclick="refreshToken()">使用 refresh_token 刷新</button>
+            <div id="refreshResult" class="result-box"></div>
+        </div>
+    </div>
+
+    <!-- 错误区域 -->
+    <div id="errorSection">
+        <h1 class="error">&#10007; 授权失败</h1>
+        <p class="subtitle" id="errorMsg"></p>
+    </div>
+
+    <div style="margin-top:20px">
+        <a href="/oauth2-test.html" class="btn btn-secondary">返回测试页</a>
+    </div>
+</div>
+
+<script>
+    // 解析 URL 参数
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const error = urlParams.get('error');
+
+    if (error) {
+        document.getElementById('errorSection').style.display = 'block';
+        document.getElementById('successSection').style.display = 'none';
+        document.getElementById('errorMsg').textContent = '错误: ' + error;
+    } else if (code) {
+        document.getElementById('successSection').style.display = 'block';
+        document.getElementById('errorSection').style.display = 'none';
+        document.getElementById('authCode').value = code;
+        document.getElementById('stateVal').value = state || '';
+    } else {
+        document.getElementById('errorSection').style.display = 'block';
+        document.getElementById('successSection').style.display = 'none';
+        document.getElementById('errorMsg').textContent = '未收到授权码';
+    }
+
+    let lastRefreshToken = '';
+
+    function copyCode() {
+        const input = document.getElementById('authCode');
+        input.select();
+        navigator.clipboard.writeText(input.value);
+    }
+
+    async function exchangeToken() {
+        const params = new URLSearchParams();
+        params.append('grant_type', 'authorization_code');
+        params.append('code', document.getElementById('authCode').value);
+        params.append('redirect_uri', document.getElementById('redirectUri').value);
+        params.append('client_id', document.getElementById('clientId').value);
+        params.append('client_secret', document.getElementById('clientSecret').value);
+
+        try {
+            const resp = await fetch(document.getElementById('tokenUrl').value, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString()
+            });
+            const data = await resp.json();
+            const box = document.getElementById('tokenResult');
+            box.textContent = JSON.stringify(data, null, 2);
+            box.className = 'result-box show';
+
+            if (data.refresh_token) {
+                lastRefreshToken = data.refresh_token;
+                document.getElementById('refreshSection').style.display = 'block';
+            }
+        } catch (e) {
+            const box = document.getElementById('tokenResult');
+            box.textContent = 'Error: ' + e.message;
+            box.className = 'result-box show';
+        }
+    }
+
+    async function refreshToken() {
+        const params = new URLSearchParams();
+        params.append('grant_type', 'refresh_token');
+        params.append('refresh_token', lastRefreshToken);
+        params.append('client_id', document.getElementById('clientId').value);
+        params.append('client_secret', document.getElementById('clientSecret').value);
+
+        try {
+            const resp = await fetch(document.getElementById('tokenUrl').value, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString()
+            });
+            const data = await resp.json();
+            const box = document.getElementById('refreshResult');
+            box.textContent = JSON.stringify(data, null, 2);
+            box.className = 'result-box show';
+
+            if (data.refresh_token) {
+                lastRefreshToken = data.refresh_token;
+            }
+        } catch (e) {
+            const box = document.getElementById('refreshResult');
+            box.textContent = 'Error: ' + e.message;
+            box.className = 'result-box show';
+        }
+    }
+</script>
+</body>
+</html>

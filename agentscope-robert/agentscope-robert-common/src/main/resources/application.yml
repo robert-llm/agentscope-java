@@ -1,0 +1,21 @@
+server:
+  port: 18099
+
+# OAuth2 Resource Server 配置
+oauth2:
+  resource-server:
+    # JWT 签名密钥（生产环境请使用更复杂的随机字符串，至少 32 字符）
+    jwt-secret: agentscope-robert-default-jwt-secret-key-2026-must-be-at-least-256-bits
+    # Token 有效期（秒），默认 24 小时
+    jwt-expiration-seconds: 86400
+    # Token 签发者标识
+    issuer: agentscope-robert
+    # 是否启用 OAuth2 认证（开发环境可设为 false 跳过认证）
+    enabled: true
+
+# SpringDoc / Swagger 配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

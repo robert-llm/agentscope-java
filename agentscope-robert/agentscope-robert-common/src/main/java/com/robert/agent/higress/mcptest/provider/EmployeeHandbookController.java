@@ -7,6 +7,7 @@ import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.TextBlockEndEvent;
 import io.agentscope.core.message.Msg;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @RestController
 @RequestMapping("/mcp/api/handbook")
 @Tag(name = "EmployeeHandbook", description = "员工手册知识库问答接口")
+@SecurityRequirement(name = "bearerAuth")
 public class EmployeeHandbookController {
 
     private static final Logger log = LoggerFactory.getLogger(EmployeeHandbookController.class);
@@ -49,7 +51,8 @@ public class EmployeeHandbookController {
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "员工手册流式对话",
-            description = "基于员工手册知识库的流式问答接口，通过 SSE 实时推送回答内容")
+            description = "基于员工手册知识库的流式问答接口，通过 SSE 实时推送回答内容",
+            security = @SecurityRequirement(name = "bearerAuth"))
     public SseEmitter handbookStream(@RequestBody HandbookChatRequest request) {
         String message = request.getMessage();
         if (message == null || message.isBlank()) {
@@ -174,7 +177,8 @@ public class EmployeeHandbookController {
 
     @PostMapping(value = "/chat")
     @Operation(summary = "员工手册同步问答",
-            description = "基于员工手册知识库的同步问答接口，返回完整回答")
+            description = "基于员工手册知识库的同步问答接口，返回完整回答",
+            security = @SecurityRequirement(name = "bearerAuth"))
     public Map<String, Object> handbookChat(@RequestBody HandbookChatRequest request) {
         String message = request.getMessage();
         if (message == null || message.isBlank()) {
