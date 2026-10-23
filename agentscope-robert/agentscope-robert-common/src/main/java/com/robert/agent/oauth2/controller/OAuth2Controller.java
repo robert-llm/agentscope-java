@@ -125,7 +125,8 @@ public class OAuth2Controller {
             @RequestParam(value = "scope", required = false) String scope,
             @RequestParam(value = "state", required = false) String state) {
 
-        log.info("[OAuth2 授权确认] approved={}, client_id={}", approved, clientId);
+        log.info("[OAuth2 授权确认] approved={}, client_id={}, redirect_uri={}, scope={}, state={}",
+                approved, clientId, redirectUri, scope, state);
 
         if (!"true".equals(approved)) {
             // 用户拒绝授权

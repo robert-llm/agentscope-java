@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.codec.Utf8;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -31,7 +32,8 @@ import java.util.Map;
 /**
  * OAuth2 Resource Server 安全配置。
  *
- * <p>仅拦截 {@code /mcp/api/handbook/**} 路径，天气接口不受影响。
+ * <p>拦截 {@code /mcp/api/handbook/**} 等受保护路径，天气接口不受影响。
+ * 放行 {@code /.well-known/**} OAuth2 元数据端点供客户端自动发现。
  * 当 {@code oauth2.resource-server.enabled=false} 时放行所有请求（开发模式）。
  *
  * @Author: luorenshu
@@ -47,18 +49,30 @@ public class OAuth2SecurityConfig {
         this.oAuth2Properties = oAuth2Properties;
     }
 
+    /**
+     * 让 OAuth2 元数据发现端点和错误页面完全绕过安全过滤链，
+     * 避免被 Spring Security 内置的 OAuth2ProtectedResourceMetadataFilter 拦截。
+     */
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers(
+                "/.well-known/**",
+                "/error"
+        );
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         // 开发模式：关闭认证
         if (!oAuth2Properties.isEnabled()) {
-            http.securityMatcher("/mcp/api/handbook/**", "/mcp/api/auth/**")
+            http.securityMatcher("/**")
                     .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                     .csrf(csrf -> csrf.disable());
             return http.build();
         }
 
         http
-                .securityMatcher("/mcp/api/handbook/**", "/mcp/api/auth/**")
+                .securityMatcher("/**")
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -68,6 +82,9 @@ public class OAuth2SecurityConfig {
                         // OAuth2 授权端点无需认证
                         .requestMatchers("/mcp/api/auth/authorize", "/mcp/api/auth/token",
                                 "/mcp/api/auth/login").permitAll()
+                        // 静态资源（测试页面）
+                        .requestMatchers("/oauth2-test.html", "/oauth2-callback.html",
+                                "/workbuddy-oauth2-flow.html").permitAll()
                         // 其余接口需要认证
                         .anyRequest().authenticated()
                 )
