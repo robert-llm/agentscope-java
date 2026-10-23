@@ -1,9 +1,11 @@
 package com.robert.agent.oauth2.controller;
 
+import com.robert.agent.oauth2.model.OAuth2Client;
 import com.robert.agent.oauth2.model.TokenResponse;
 import com.robert.agent.oauth2.provider.AuthorizationCodeStore;
 import com.robert.agent.oauth2.provider.AuthorizationCodeStore.AuthorizationCodeInfo;
 import com.robert.agent.oauth2.provider.JwtTokenProvider;
+import com.robert.agent.oauth2.provider.OAuth2ClientStore;
 import com.robert.agent.oauth2.provider.RefreshTokenStore;
 import com.robert.agent.oauth2.provider.RefreshTokenStore.RefreshTokenInfo;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +20,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -75,13 +80,16 @@ public class OAuth2Controller {
     private final AuthorizationCodeStore authorizationCodeStore;
     private final RefreshTokenStore refreshTokenStore;
     private final JwtTokenProvider jwtTokenProvider;
+    private final OAuth2ClientStore oAuth2ClientStore;
 
     public OAuth2Controller(AuthorizationCodeStore authorizationCodeStore,
                             RefreshTokenStore refreshTokenStore,
-                            JwtTokenProvider jwtTokenProvider) {
+                            JwtTokenProvider jwtTokenProvider,
+                            OAuth2ClientStore oAuth2ClientStore) {
         this.authorizationCodeStore = authorizationCodeStore;
         this.refreshTokenStore = refreshTokenStore;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.oAuth2ClientStore = oAuth2ClientStore;
     }
 
     // ==================== 请求用户授权 ====================
@@ -94,22 +102,39 @@ public class OAuth2Controller {
             @RequestParam("client_id") String clientId,
             @RequestParam("redirect_uri") String redirectUri,
             @RequestParam(value = "scope", required = false) String scope,
-            @RequestParam(value = "state", required = false) String state) {
+            @RequestParam(value = "state", required = false) String state,
+            @RequestParam(value = "code_challenge", required = false) String codeChallenge,
+            @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod) {
 
-        log.info("[OAuth2 授权] response_type={}, client_id={}, redirect_uri={}, scope={}",
-                responseType, clientId, redirectUri, scope);
+        log.info("[OAuth2 授权] response_type={}, client_id={}, redirect_uri={}, scope={}, code_challenge={}, code_challenge_method={}",
+                responseType, clientId, redirectUri, scope, codeChallenge != null ? "present" : "absent", codeChallengeMethod);
 
         if (!"code".equals(responseType)) {
             return ResponseEntity.badRequest().body("{\"error\":\"unsupported_response_type\"}");
         }
 
+        // 校验客户端注册信息
+        OAuth2Client client = oAuth2ClientStore.getClient(clientId);
+        if (client == null || !client.enabled()) {
+            return ResponseEntity.badRequest().body(
+                    "{\"error\":\"invalid_client\",\"error_description\":\"未注册的 client_id\"}");
+        }
+        if (!client.isRedirectUriAllowed(redirectUri)) {
+            return ResponseEntity.badRequest().body(
+                    "{\"error\":\"invalid_redirect_uri\",\"error_description\":\"redirect_uri 未在客户端注册\"}");
+        }
+        if (!client.isScopeAllowed(scope)) {
+            return ResponseEntity.badRequest().body(
+                    "{\"error\":\"invalid_scope\",\"error_description\":\"请求的 scope 超出客户端授权范围\"}");
+        }
+
         // 解析 scope
         List<String> scopes = (scope != null && !scope.isBlank())
                 ? List.of(scope.split("\\s+"))
-                : List.of("handbook:read", "handbook:write");
+                : client.scopes();
 
         // 展示授权确认页
-        String html = buildConsentPageHtml(clientId, redirectUri, scopes, state);
+        String html = buildConsentPageHtml(clientId, redirectUri, scopes, state, codeChallenge, codeChallengeMethod);
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .body(html);
@@ -123,10 +148,12 @@ public class OAuth2Controller {
             @RequestParam("client_id") String clientId,
             @RequestParam("redirect_uri") String redirectUri,
             @RequestParam(value = "scope", required = false) String scope,
-            @RequestParam(value = "state", required = false) String state) {
+            @RequestParam(value = "state", required = false) String state,
+            @RequestParam(value = "code_challenge", required = false) String codeChallenge,
+            @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod) {
 
-        log.info("[OAuth2 授权确认] approved={}, client_id={}, redirect_uri={}, scope={}, state={}",
-                approved, clientId, redirectUri, scope, state);
+        log.info("[OAuth2 授权确认] approved={}, client_id={}, redirect_uri={}, scope={}, state={}, code_challenge={}",
+                approved, clientId, redirectUri, scope, state, codeChallenge != null ? "present" : "absent");
 
         if (!"true".equals(approved)) {
             // 用户拒绝授权
@@ -141,11 +168,12 @@ public class OAuth2Controller {
         // 用户同意授权，生成授权码
         // TODO: 从当前登录会话获取用户名，此处演示使用固定用户
         String username = "admin";
+        OAuth2Client client = oAuth2ClientStore.getClient(clientId);
         List<String> scopes = (scope != null && !scope.isBlank())
                 ? List.of(scope.split("\\s+"))
-                : List.of("handbook:read", "handbook:write");
+                : (client != null ? client.scopes() : List.of("read", "write"));
 
-        String code = authorizationCodeStore.createCode(clientId, username, redirectUri, scopes);
+        String code = authorizationCodeStore.createCode(clientId, username, redirectUri, scopes, codeChallenge, codeChallengeMethod);
 
         // 重定向至 redirect_uri，携带 code 和 state
         String separator = redirectUri.contains("?") ? "&" : "?";
@@ -162,30 +190,39 @@ public class OAuth2Controller {
 
     @PostMapping(value = "/token", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
     @Operation(summary = "换取接口调用凭证",
-            description = "使用授权码或 refresh_token 换取 access_token")
+            description = "使用授权码或 refresh_token 换取 access_token。公共客户端（如 WorkBuddy）使用 PKCE，无需 client_secret")
     public ResponseEntity<?> token(
             @RequestParam("grant_type") String grantType,
             @RequestParam(value = "code", required = false) String code,
             @RequestParam(value = "redirect_uri", required = false) String redirectUri,
             @RequestParam(value = "refresh_token", required = false) String refreshToken,
             @RequestParam("client_id") String clientId,
-            @RequestParam("client_secret") String clientSecret) {
+            @RequestParam(value = "client_secret", required = false) String clientSecret,
+            @RequestParam(value = "code_verifier", required = false) String codeVerifier) {
 
-        log.info("[OAuth2 Token] grant_type={}, client_id={}", grantType, clientId);
+        log.info("[OAuth2 Token] grant_type={}, client_id={}, code_verifier={}", grantType, clientId, codeVerifier != null ? "present" : "absent");
 
-        // ============================================================
-        // TODO: 校验 clientId 和 clientSecret（查数据库或配置）
-        // 当前为演示模式：任意非空值均通过
-        // ============================================================
-        if (clientId == null || clientId.isBlank() || clientSecret == null || clientSecret.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "invalid_client",
-                    "error_description", "client_id 和 client_secret 不能为空"));
+        // 校验客户端凭证（如果提供了 client_secret）
+        if (clientSecret != null && !clientSecret.isBlank()) {
+            if (!oAuth2ClientStore.validateClient(clientId, clientSecret)) {
+                log.warn("[OAuth2 Token] 客户端认证失败: client_id={}", clientId);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "error", "invalid_client",
+                        "error_description", "client_id 或 client_secret 不正确"));
+            }
+        } else {
+            // 公共客户端必须使用 PKCE
+            OAuth2Client client = oAuth2ClientStore.getClient(clientId);
+            if (client == null || !client.enabled()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "error", "invalid_client",
+                        "error_description", "未注册的 client_id"));
+            }
         }
 
         return switch (grantType) {
-            case "authorization_code" -> handleAuthorizationCode(code, redirectUri, clientId, clientSecret);
-            case "refresh_token" -> handleRefreshToken(refreshToken, clientId, clientSecret);
+            case "authorization_code" -> handleAuthorizationCode(code, redirectUri, clientId, codeVerifier);
+            case "refresh_token" -> handleRefreshToken(refreshToken, clientId);
             default -> ResponseEntity.badRequest().body(Map.of(
                     "error", "unsupported_grant_type",
                     "error_description", "不支持的 grant_type: " + grantType));
@@ -198,7 +235,7 @@ public class OAuth2Controller {
      * 授权码换取 Token。
      */
     private ResponseEntity<?> handleAuthorizationCode(
-            String code, String redirectUri, String clientId, String clientSecret) {
+            String code, String redirectUri, String clientId, String codeVerifier) {
 
         if (code == null || code.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -215,14 +252,28 @@ public class OAuth2Controller {
                     "error", "invalid_grant", "error_description", "授权码无效或已过期"));
         }
 
+        // PKCE 验证：如果授权码关联了 code_challenge，则必须验证 code_verifier
+        if (codeInfo.codeChallenge() != null && !codeInfo.codeChallenge().isBlank()) {
+            if (codeVerifier == null || codeVerifier.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "invalid_grant",
+                        "error_description", "PKCE 验证失败：缺少 code_verifier"));
+            }
+            if (!verifyCodeVerifier(codeVerifier, codeInfo.codeChallenge(), codeInfo.codeChallengeMethod())) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "invalid_grant",
+                        "error_description", "PKCE 验证失败：code_verifier 不匹配"));
+            }
+            log.info("[OAuth2 Token] PKCE 验证成功: client_id={}", clientId);
+        }
+
         return ResponseEntity.ok(buildTokenResponse(codeInfo.username(), codeInfo.scopes(), clientId));
     }
 
     /**
      * 刷新 Token。
      */
-    private ResponseEntity<?> handleRefreshToken(
-            String refreshToken, String clientId, String clientSecret) {
+    private ResponseEntity<?> handleRefreshToken(String refreshToken, String clientId) {
 
         if (refreshToken == null || refreshToken.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -267,7 +318,8 @@ public class OAuth2Controller {
      * 构建授权确认页 HTML。
      */
     private String buildConsentPageHtml(String clientId, String redirectUri,
-                                        List<String> scopes, String state) {
+                                        List<String> scopes, String state,
+                                        String codeChallenge, String codeChallengeMethod) {
         String scopeListHtml = scopes.stream()
                 .map(s -> "<li>" + escapeHtml(s) + "</li>")
                 .reduce("", (a, b) -> a + b);
@@ -294,10 +346,36 @@ public class OAuth2Controller {
                 + "  <input type=\"hidden\" name=\"redirect_uri\" value=\"" + escapeHtml(redirectUri) + "\">\n"
                 + (state != null ? "  <input type=\"hidden\" name=\"state\" value=\"" + escapeHtml(state) + "\">\n" : "")
                 + "  <input type=\"hidden\" name=\"scope\" value=\"" + escapeHtml(String.join(" ", scopes)) + "\">\n"
+                + (codeChallenge != null ? "  <input type=\"hidden\" name=\"code_challenge\" value=\"" + escapeHtml(codeChallenge) + "\">\n" : "")
+                + (codeChallengeMethod != null ? "  <input type=\"hidden\" name=\"code_challenge_method\" value=\"" + escapeHtml(codeChallengeMethod) + "\">\n" : "")
                 + "  <button type=\"submit\" name=\"approved\" value=\"true\" class=\"btn btn-approve\">同意授权</button>\n"
                 + "  <button type=\"submit\" name=\"approved\" value=\"false\" class=\"btn btn-deny\">拒绝</button>\n"
                 + "</form>\n"
                 + "</div></body></html>";
+    }
+
+    /**
+     * 验证 PKCE code_verifier。
+     *
+     * @param codeVerifier      客户端发送的 code_verifier
+     * @param codeChallenge     授权时存储的 code_challenge
+     * @param codeChallengeMethod code_challenge_method（S256 或 plain）
+     * @return 验证是否通过
+     */
+    private boolean verifyCodeVerifier(String codeVerifier, String codeChallenge, String codeChallengeMethod) {
+        if ("plain".equalsIgnoreCase(codeChallengeMethod)) {
+            return codeVerifier.equals(codeChallenge);
+        }
+        // 默认 S256：BASE64URL(SHA256(code_verifier)) == code_challenge
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(codeVerifier.getBytes(StandardCharsets.US_ASCII));
+            String computed = Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+            return computed.equals(codeChallenge);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("[OAuth2] SHA-256 算法不可用", e);
+            return false;
+        }
     }
 
     private static String escapeHtml(String text) {

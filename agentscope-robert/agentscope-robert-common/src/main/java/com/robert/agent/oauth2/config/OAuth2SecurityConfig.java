@@ -81,7 +81,7 @@ public class OAuth2SecurityConfig {
                         .requestMatchers("/mcp/api/handbook/status").permitAll()
                         // OAuth2 授权端点无需认证
                         .requestMatchers("/mcp/api/auth/authorize", "/mcp/api/auth/token",
-                                "/mcp/api/auth/login").permitAll()
+                                "/mcp/api/auth/login", "/mcp/api/auth/admin/**").permitAll()
                         // 静态资源（测试页面）
                         .requestMatchers("/oauth2-test.html", "/oauth2-callback.html",
                                 "/workbuddy-oauth2-flow.html").permitAll()

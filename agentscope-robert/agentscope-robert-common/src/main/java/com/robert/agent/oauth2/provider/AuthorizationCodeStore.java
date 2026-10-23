@@ -26,17 +26,21 @@ public class AuthorizationCodeStore {
     /**
      * 生成并存储授权码。
      *
-     * @param clientId    应用 ID
-     * @param username    授权用户
-     * @param redirectUri 回调地址
-     * @param scopes      权限范围
+     * @param clientId            应用 ID
+     * @param username            授权用户
+     * @param redirectUri         回调地址
+     * @param scopes              权限范围
+     * @param codeChallenge       PKCE code_challenge（可选）
+     * @param codeChallengeMethod PKCE code_challenge_method（可选，默认 S256）
      * @return 授权码
      */
-    public String createCode(String clientId, String username, String redirectUri, List<String> scopes) {
+    public String createCode(String clientId, String username, String redirectUri, List<String> scopes,
+                             String codeChallenge, String codeChallengeMethod) {
         String code = "auth_" + UUID.randomUUID().toString().replace("-", "");
         codeStore.put(code, new AuthorizationCodeInfo(
                 clientId, username, redirectUri, scopes,
-                Instant.now().plusSeconds(CODE_EXPIRATION_SECONDS)
+                Instant.now().plusSeconds(CODE_EXPIRATION_SECONDS),
+                codeChallenge, codeChallengeMethod
         ));
         return code;
     }
@@ -71,7 +75,9 @@ public class AuthorizationCodeStore {
             String username,
             String redirectUri,
             List<String> scopes,
-            Instant expiresAt
+            Instant expiresAt,
+            String codeChallenge,
+            String codeChallengeMethod
     ) {
     }
 }

@@ -70,11 +70,12 @@ public class OAuth2MetadataController {
         metadata.put("issuer", baseUrl);
         metadata.put("authorization_endpoint", baseUrl + "/mcp/api/auth/authorize");
         metadata.put("token_endpoint", baseUrl + "/mcp/api/auth/token");
-        metadata.put("token_endpoint_auth_methods_supported", List.of("client_secret_post"));
+        metadata.put("registration_endpoint", baseUrl + "/mcp/api/auth/admin/clients");
+        metadata.put("token_endpoint_auth_methods_supported", List.of("client_secret_post", "none"));
         metadata.put("response_types_supported", List.of("code"));
         metadata.put("grant_types_supported", List.of("authorization_code", "refresh_token"));
         metadata.put("scopes_supported", List.of("read", "write"));
-        metadata.put("code_challenge_methods_supported", List.of("S256"));
+        metadata.put("code_challenge_methods_supported", List.of("S256", "plain"));
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_JSON)

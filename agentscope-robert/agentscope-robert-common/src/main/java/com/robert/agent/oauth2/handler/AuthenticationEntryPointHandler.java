@@ -28,7 +28,11 @@ public class AuthenticationEntryPointHandler implements AuthenticationEntryPoint
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) {
-        log.warn("[OAuth2] 认证失败: uri={}, error={}", request.getRequestURI(), authException.getMessage());
+        // 记录请求头信息，便于排查客户端是否正确携带 Token
+        String authHeader = request.getHeader("Authorization");
+        log.warn("[OAuth2] 认证失败: uri={}, method={}, error={}, Authorization={}",
+                request.getRequestURI(), request.getMethod(), authException.getMessage(),
+                authHeader != null ? (authHeader.substring(0, Math.min(authHeader.length(), 30)) + "...") : "null");
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

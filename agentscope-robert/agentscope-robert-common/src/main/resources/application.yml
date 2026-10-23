@@ -12,6 +12,17 @@ oauth2:
     issuer: agentscope-robert
     # 是否启用 OAuth2 认证（开发环境可设为 false 跳过认证）
     enabled: true
+  # 预注册 OAuth2 客户端
+  clients:
+    - client-id: workbuddy_robert
+      client-secret: wb_secret_robert_2026_secure_key
+      redirect-uris:
+        - http://localhost:9002/route
+        - http://localhost:18099/oauth2-callback.html
+      scopes:
+        - read
+        - write
+      enabled: true
 
 # SpringDoc / Swagger 配置
 springdoc:
