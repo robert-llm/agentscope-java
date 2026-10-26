@@ -15,6 +15,7 @@ import org.springframework.context.annotation.ComponentScan;
                 "com.robert.agent.higress.mcptest.provider",
                 "com.robert.agent.higress.mcptest.service",
                 "com.robert.agent.oauth2",
+                "com.robert.agent.mcp",
                 "io.agentscope"
         }
 )

@@ -43,7 +43,7 @@ public class OAuth2MetadataController {
         log.info("[OAuth2 元数据] 受保护资源元数据请求: baseUrl={}", baseUrl);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("resource", baseUrl + "/mcp/api/handbook");
+        metadata.put("resource", baseUrl + "/mcp");
         metadata.put("authorization_servers", List.of(baseUrl));
         metadata.put("bearer_methods_supported", List.of("header"));
         metadata.put("resource_documentation", baseUrl + "/v3/api-docs");
@@ -54,6 +54,9 @@ public class OAuth2MetadataController {
     }
 
     /**
+     * 举例：workbuddy 拿到本请求返回结果中的，authorization_endpoint后，拼接请求，然后请求：http://localhost:18099/mcp/api/auth/authorize
+     * ?response_type
+     * =code&client_id=wb_36b889023ff04d53&code_challenge=P3E22-QXDp_GJyGeWg_GulYj6aMiL9R1YN1Td2_XqyQ&code_challenge_method=S256&redirect_uri=workbuddy%3A%2F%2Fworkbuddy%2Fmcp%2Fcustom-mcp%253A%25E5%25BC%2598%25E9%2587%2591%25E5%259C%25B0%25E5%2591%2598%25E5%25B7%25A5%25E5%258A%25A9%25E6%2589%258B%2Foauth%2Fcallback&state=zsMghcqN7_jaYDtQqgnvQ6TsSoUn2_LIkKWixIqvhLU&resource=http%3A%2F%2Flocalhost%3A18099%2Fmcp%2Fapi%2Fhandbook
      * 授权服务器元数据（RFC 8414）。
      *
      * <p>客户端通过受保护资源元数据中的 authorization_servers 地址访问此端点，

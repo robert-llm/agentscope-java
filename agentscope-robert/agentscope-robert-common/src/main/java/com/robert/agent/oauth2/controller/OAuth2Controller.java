@@ -25,6 +25,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 
 /**
  * OAuth2 授权端点：实现标准授权码流程。
@@ -116,8 +117,16 @@ public class OAuth2Controller {
         // 校验客户端注册信息
         OAuth2Client client = oAuth2ClientStore.getClient(clientId);
         if (client == null || !client.enabled()) {
-            return ResponseEntity.badRequest().body(
-                    "{\"error\":\"invalid_client\",\"error_description\":\"未注册的 client_id\"}");
+            // 容错处理：服务器重启后 DCR 客户端可能丢失（旧版本未持久化）。
+            // 如果 redirect_uri 格式合法（以 workbuddy:// 开头），自动重新注册该客户端。
+            if (redirectUri != null && redirectUri.startsWith("workbuddy://")) {
+                log.warn("[OAuth2 授权] client_id={} 不存在，自动重新注册（redirect_uri={}）", clientId, redirectUri);
+                client = oAuth2ClientStore.registerClient(clientId, "",
+                        List.of(redirectUri), List.of("read", "write"));
+            } else {
+                return ResponseEntity.badRequest().body(
+                        "{\"error\":\"invalid_client\",\"error_description\":\"未注册的 client_id\"}");
+            }
         }
         if (!client.isRedirectUriAllowed(redirectUri)) {
             return ResponseEntity.badRequest().body(
@@ -157,9 +166,10 @@ public class OAuth2Controller {
 
         if (!"true".equals(approved)) {
             // 用户拒绝授权
-            String separator = redirectUri.contains("?") ? "&" : "?";
-            String location = redirectUri + separator + "error=access_denied"
-                    + (state != null ? "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8) : "");
+            String location = buildRedirectLocation(redirectUri,
+                    "error=access_denied"
+                            + (state != null ? "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8) : ""));
+            log.info("[OAuth2 授权拒绝] 重定向至: {}", location);
             return ResponseEntity.status(HttpStatus.FOUND)
                     .header(HttpHeaders.LOCATION, location)
                     .build();
@@ -176,11 +186,11 @@ public class OAuth2Controller {
         String code = authorizationCodeStore.createCode(clientId, username, redirectUri, scopes, codeChallenge, codeChallengeMethod);
 
         // 重定向至 redirect_uri，携带 code 和 state
-        String separator = redirectUri.contains("?") ? "&" : "?";
-        String location = redirectUri + separator
-                + "code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
+        String queryString = "code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
                 + (state != null ? "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8) : "");
+        String location = buildRedirectLocation(redirectUri, queryString);
 
+        log.info("[OAuth2 授权确认] 重定向至: {}", location);
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, location)
                 .build();
@@ -352,6 +362,64 @@ public class OAuth2Controller {
                 + "  <button type=\"submit\" name=\"approved\" value=\"false\" class=\"btn btn-deny\">拒绝</button>\n"
                 + "</form>\n"
                 + "</div></body></html>";
+    }
+
+    /**
+     * 构建重定向 Location 头值，对 URI 中的非 ASCII 字符（如中文）进行百分号编码，
+     * 同时保留 URI 结构字符（scheme、authority、path 分隔符）。
+     */
+    private String buildRedirectLocation(String redirectUri, String queryString) {
+        String separator = redirectUri.contains("?") ? "&" : "?";
+        String fullUri = redirectUri + separator + queryString;
+
+        StringBuilder encoded = new StringBuilder();
+        int i = 0;
+        int len = fullUri.length();
+
+        // 1. 保留 scheme（如 "workbuddy://"）
+        int schemeEnd = fullUri.indexOf("://");
+        if (schemeEnd >= 0) {
+            encoded.append(fullUri, 0, schemeEnd + 3);
+            i = schemeEnd + 3;
+        }
+
+        // 2. 保留 authority（host:port），直到下一个 /
+        int pathStart = fullUri.indexOf('/', i);
+        if (pathStart >= 0) {
+            encoded.append(fullUri, i, pathStart);
+            i = pathStart;
+        }
+
+        // 3. 对路径部分逐段编码（保留 / 不编码），处理中文等非 ASCII 字符
+        String remaining = fullUri.substring(i);
+        int queryIdx = remaining.indexOf('?');
+        String pathPart = queryIdx >= 0 ? remaining.substring(0, queryIdx) : remaining;
+        String queryPart = queryIdx >= 0 ? remaining.substring(queryIdx) : "";
+
+        StringJoiner joiner = new StringJoiner("/");
+        for (String segment : pathPart.split("/", -1)) {
+            joiner.add(encodeUriSegment(segment));
+        }
+        encoded.append(joiner);
+        encoded.append(queryPart);
+
+        return encoded.toString();
+    }
+
+    /**
+     * 对 URI 片段中的非 ASCII 字符进行百分号编码。
+     */
+    private String encodeUriSegment(String segment) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : segment.getBytes(StandardCharsets.UTF_8)) {
+            char c = (char) (b & 0xFF);
+            if (c >= 0x80) {
+                sb.append(String.format("%%%02X", b & 0xFF));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /**

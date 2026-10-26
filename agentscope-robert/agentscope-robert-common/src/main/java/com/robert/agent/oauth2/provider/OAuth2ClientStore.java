@@ -1,12 +1,17 @@
 package com.robert.agent.oauth2.provider;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.robert.agent.oauth2.model.OAuth2Client;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,8 +28,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public class OAuth2ClientStore {
 
     private static final Logger log = LoggerFactory.getLogger(OAuth2ClientStore.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final Map<String, OAuth2Client> clients = new ConcurrentHashMap<>();
+
+    /** DCR 动态注册客户端的持久化文件路径 */
+    @Value("${oauth2.dcr-persist-file:oauth2-dcr-clients.json}")
+    private String dcrPersistFile;
 
     @PostConstruct
     public void init() {
@@ -32,6 +42,54 @@ public class OAuth2ClientStore {
         clients.keySet().forEach(id ->
                 log.info("  - client_id={}, scopes={}, redirect_uris={}",
                         id, clients.get(id).scopes(), clients.get(id).redirectUris()));
+
+        // 从文件加载 DCR 持久化的客户端
+        loadDcrClients();
+    }
+
+    /**
+     * 从持久化文件加载 DCR 注册的客户端。
+     */
+    private void loadDcrClients() {
+        File file = new File(dcrPersistFile);
+        if (!file.exists()) {
+            log.info("[OAuth2 Client] DCR 持久化文件不存在，跳过加载");
+            return;
+        }
+        try {
+            List<PersistedClient> persisted = MAPPER.readValue(file,
+                    new TypeReference<List<PersistedClient>>() {});
+            int loaded = 0;
+            for (PersistedClient pc : persisted) {
+                if (!clients.containsKey(pc.clientId)) {
+                    OAuth2Client client = new OAuth2Client(
+                            pc.clientId, pc.clientSecret, pc.redirectUris, pc.scopes, true);
+                    clients.put(pc.clientId, client);
+                    loaded++;
+                }
+            }
+            log.info("[OAuth2 Client] 从持久化文件加载 {} 个 DCR 客户端（共 {} 个）", loaded, clients.size());
+        } catch (IOException e) {
+            log.warn("[OAuth2 Client] 加载 DCR 持久化文件失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 将当前 DCR 客户端持久化到文件。
+     */
+    private void persistDcrClients() {
+        try {
+            List<PersistedClient> persisted = new ArrayList<>();
+            for (OAuth2Client client : clients.values()) {
+                persisted.add(new PersistedClient(
+                        client.clientId(), client.clientSecret(),
+                        client.redirectUris(), client.scopes()));
+            }
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(dcrPersistFile), persisted);
+            log.debug("[OAuth2 Client] DCR 客户端已持久化到 {}（共 {} 个）", dcrPersistFile, persisted.size());
+        } catch (IOException e) {
+            log.error("[OAuth2 Client] 持久化 DCR 客户端失败: {}", e.getMessage());
+        }
     }
 
     public OAuth2Client getClient(String clientId) {
@@ -48,7 +106,16 @@ public class OAuth2ClientStore {
         OAuth2Client client = new OAuth2Client(clientId, clientSecret, redirectUris, scopes, true);
         clients.put(clientId, client);
         log.info("[OAuth2 Client] 注册新客户端: client_id={}, scopes={}", clientId, scopes);
+        // 持久化到文件
+        persistDcrClients();
         return client;
+    }
+
+    /**
+     * 检查指定 client_id 是否存在。
+     */
+    public boolean hasClient(String clientId) {
+        return clients.containsKey(clientId);
     }
 
     public List<Map<String, Object>> listClients() {
@@ -100,5 +167,25 @@ public class OAuth2ClientStore {
         public void setScopes(List<String> scopes) { this.scopes = scopes; }
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    }
+
+    /**
+     * 持久化用的简化结构（JSON 序列化/反序列化）。
+     */
+    private static class PersistedClient {
+        public String clientId;
+        public String clientSecret;
+        public List<String> redirectUris;
+        public List<String> scopes;
+
+        public PersistedClient() {}
+
+        public PersistedClient(String clientId, String clientSecret,
+                               List<String> redirectUris, List<String> scopes) {
+            this.clientId = clientId;
+            this.clientSecret = clientSecret;
+            this.redirectUris = redirectUris;
+            this.scopes = scopes;
+        }
     }
 }

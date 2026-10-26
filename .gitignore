@@ -90,6 +90,9 @@ logs/
 ## harness db
 **/*.db
 
+## OAuth2 DCR persisted clients (contains secrets)
+oauth2-dcr-clients.json
+
 .dev-stack/
 
 # aistio local build artifacts
