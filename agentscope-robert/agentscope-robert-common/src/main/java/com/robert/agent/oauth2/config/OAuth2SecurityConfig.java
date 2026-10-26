@@ -84,7 +84,7 @@ public class OAuth2SecurityConfig {
                                 "/mcp/api/auth/login", "/mcp/api/auth/admin/**").permitAll()
                         // 静态资源（测试页面）
                         .requestMatchers("/oauth2-test.html", "/oauth2-callback.html",
-                                "/workbuddy-oauth2-flow.html").permitAll()
+                                "/workbuddy-oauth2-flow.html", "/login-test.html").permitAll()
                         // 其余接口需要认证
                         .anyRequest().authenticated()
                 )

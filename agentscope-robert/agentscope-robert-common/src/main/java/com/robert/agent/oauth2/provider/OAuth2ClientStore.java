@@ -103,6 +103,11 @@ public class OAuth2ClientStore {
 
     public OAuth2Client registerClient(String clientId, String clientSecret,
                                         List<String> redirectUris, List<String> scopes) {
+        // 不允许覆盖已存在的客户端（包括 YAML 预配置的客户端）
+        if (clients.containsKey(clientId)) {
+            log.warn("[OAuth2 Client] 拒绝注册: client_id={} 已存在，不允许覆盖", clientId);
+            return clients.get(clientId);
+        }
         OAuth2Client client = new OAuth2Client(clientId, clientSecret, redirectUris, scopes, true);
         clients.put(clientId, client);
         log.info("[OAuth2 Client] 注册新客户端: client_id={}, scopes={}", clientId, scopes);

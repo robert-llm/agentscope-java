@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>登录测试 - JWT Token 获取</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                padding: 40px; max-width: 560px; width: 90%; }
+        h1 { font-size: 22px; margin-bottom: 8px; color: #1a1a1a; }
+        .subtitle { color: #666; font-size: 14px; margin-bottom: 28px; }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; font-weight: 500; }
+        .field input { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px;
+                       font-size: 14px; font-family: 'Consolas', monospace; }
+        .field input:focus { outline: none; border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.1); }
+        .btn { display: inline-block; padding: 10px 32px; border: none; border-radius: 6px;
+               font-size: 15px; cursor: pointer; text-decoration: none; color: #fff; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #1677ff; }
+        .btn-secondary { background: #6b7280; margin-left: 8px; }
+        .result { margin-top: 20px; padding: 16px; border-radius: 8px; font-size: 13px;
+                  font-family: 'Consolas', monospace; line-height: 1.6; word-break: break-all; display: none; }
+        .result.success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; display: block; }
+        .result.error { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; display: block; }
+        .result .label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                         font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+        .result pre { white-space: pre-wrap; word-break: break-all; }
+        .tip { margin-top: 20px; padding: 12px 16px; background: #f6f8fa; border-radius: 8px;
+               font-size: 13px; color: #555; line-height: 1.8; }
+        .tip code { background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-family: 'Consolas', monospace; }
+        .tip a { color: #1677ff; text-decoration: none; }
+        .tip a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>登录测试 - JWT Token 获取</h1>
+    <p class="subtitle">输入用户名和密码，调用 POST /mcp/api/auth/login 获取 JWT Token</p>
+
+    <div class="field">
+        <label>登录端点</label>
+        <input id="loginUrl" value="http://localhost:18099/mcp/api/auth/login">
+    </div>
+    <div class="field">
+        <label>用户名</label>
+        <input id="username" value="admin" autofocus>
+    </div>
+    <div class="field">
+        <label>密码</label>
+        <input id="password" type="password" value="admin123">
+    </div>
+
+    <div style="margin-top: 24px;">
+        <button class="btn btn-primary" onclick="doLogin()" id="loginBtn">登录</button>
+        <a class="btn btn-secondary" href="/oauth2-test.html">OAuth2 授权测试</a>
+    </div>
+
+    <div id="result" class="result"></div>
+
+    <div class="tip">
+        <strong>说明：</strong><br>
+        当前为演示模式，硬编码账号 <code>admin</code> / <code>admin123</code><br>
+        登录成功后返回的 JWT Token 可用于调用受保护接口，如：<br>
+        <code>Authorization: Bearer &lt;token&gt;</code><br><br>
+        <strong>相关页面：</strong><br>
+        <a href="/oauth2-test.html">OAuth2 授权码流程测试</a> |
+        <a href="/workbuddy-oauth2-flow.html">WorkBuddy OAuth2 流程说明</a>
+    </div>
+</div>
+
+<script>
+    async function doLogin() {
+        const loginUrl = document.getElementById('loginUrl').value;
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const resultDiv = document.getElementById('result');
+        const btn = document.getElementById('loginBtn');
+
+        if (!username || !password) {
+            resultDiv.className = 'result error';
+            resultDiv.innerHTML = '<div class="label">❌ 请输入用户名和密码</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '登录中...';
+        resultDiv.className = 'result';
+        resultDiv.style.display = 'none';
+
+        try {
+            const response = await fetch(loginUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                resultDiv.className = 'result success';
+                const tokenPreview = data.token
+                    ? data.token.substring(0, 50) + '...'
+                    : '(无 token 字段)';
+                resultDiv.innerHTML =
+                    '<div class="label">✅ 登录成功</div>' +
+                    '<div><strong>Token（前50字符）：</strong></div>' +
+                    '<pre>' + tokenPreview + '</pre>' +
+                    '<div style="margin-top:12px"><strong>完整响应：</strong></div>' +
+                    '<pre>' + JSON.stringify(data, null, 2) + '</pre>' +
+                    '<div style="margin-top:12px">' +
+                    '<button class="btn btn-primary" style="padding:6px 16px;font-size:13px" ' +
+                    'onclick="copyToken(\'' + (data.token || '') + '\')">复制 Token</button>' +
+                    '</div>';
+            } else {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML =
+                    '<div class="label">❌ 登录失败 (HTTP ' + response.status + ')</div>' +
+                    '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            }
+        } catch (err) {
+            resultDiv.className = 'result error';
+            resultDiv.innerHTML =
+                '<div class="label">❌ 请求异常</div>' +
+                '<pre>' + err.message + '</pre>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '登录';
+        }
+    }
+
+    function copyToken(token) {
+        if (!token) return;
+        navigator.clipboard.writeText(token).then(function() {
+            alert('Token 已复制到剪贴板');
+        }).catch(function() {
+            // fallback
+            const ta = document.createElement('textarea');
+            ta.value = token;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            alert('Token 已复制到剪贴板');
+        });
+    }
+
+    // 支持回车键触发登录
+    document.getElementById('password').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('username').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('password').focus();
+    });
+</script>
+</body>
+</html>
